@@ -1,0 +1,28 @@
+# Transcripts and logs are never committed (may contain harmful/disturbing outputs)
+transcripts/
+logs/
+archive/
+
+# Derived analysis artifacts
+figures/
+*.npz
+
+# Seed-pool data files (public datasets, no need to bloat the repo;
+# users run fetch_advbench.py / etc. to populate)
+data/*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+CLAUDE.md
