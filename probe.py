@@ -28,6 +28,14 @@ Three probe targets, all on the same per-message embedding substrate:
       counts (parity-balanced for any contiguous range of ≥2 turns).
       Reports vanilla AUC vs jailbroken AUC per bucket.
 
+  --target variant --split-mode {soft, hard}
+      Binary V-vs-JB probe. Tests whether a single message embedding
+      reveals the generating variant.
+        soft = 5-fold GroupKFold by run_id (probe sees all seeds in train)
+        hard = leave-one-seed-out (probe trains on 5 seeds, tested on the
+               6th held-out seed; tests seed-independence of the variant
+               signature)
+
 All probes use L2-regularized softmax LR (binary = K=2 multinomial). Splits
 are GroupKFold by run_id so a turn from a training-run never appears in
 test. Two evaluations per target: within-variant CV (vanilla, jailbroken)
@@ -327,6 +335,88 @@ def run_turn_vs_all(
             )
 
 
+def run_variant(
+    vecs: np.ndarray,
+    variants: np.ndarray,
+    run_ids: np.ndarray,
+    seeds: np.ndarray,
+    split_mode: str,
+    n_splits: int,
+    l2: float,
+) -> None:
+    """Binary V-vs-JB probe with leak-free splits.
+
+    soft: 5-fold GroupKFold by run_id (every seed appears in train+test)
+    hard: leave-one-seed-out (each fold tests a completely unseen seed)
+    """
+    y = (variants == "jailbroken").astype(np.int64)
+    n = int(len(y))
+    n_pos = int(y.sum())
+    n_neg = n - n_pos
+    print()
+    print(f"=== variant V-vs-JB probe, split_mode={split_mode!r} ===")
+    print(f"  pool: n={n}, vanilla={n_neg}, jailbroken={n_pos}")
+
+    if split_mode == "soft":
+        n_groups = len(np.unique(run_ids))
+        if n_groups < n_splits:
+            print(f"  only {n_groups} runs — skipping.")
+            return
+        proba = cv_proba(vecs, y, run_ids, n_classes=2, n_splits=n_splits, l2=l2)[:, 1]
+        pred = (proba >= 0.5).astype(np.int64)
+        auc = auc_binary(proba, y)
+        acc = float((pred == y).mean())
+        mcc = mcc_binary(y, pred)
+        print(f"  {n_splits}-fold GroupKFold by run_id (n_runs={n_groups})")
+        print(f"  AUC = {auc:.3f}   acc = {acc:.3f}   MCC = {mcc:.3f}")
+        return
+
+    if split_mode == "hard":
+        unique_seeds = np.unique(seeds)
+        if len(unique_seeds) < 2:
+            print(f"  hard split needs ≥2 seeds; got {len(unique_seeds)}.")
+            return
+        print(f"  leave-one-seed-out across {len(unique_seeds)} seeds")
+        print(
+            f"  {'held-out seed':<22}  {'n_test':>6}  "
+            f"{'V':>4}  {'JB':>4}  {'AUC':>6}  {'acc':>6}  {'MCC':>6}"
+        )
+        aucs: list[float] = []
+        for seed in unique_seeds:
+            test_mask = seeds == seed
+            train_mask = ~test_mask
+            n_test = int(test_mask.sum())
+            n_test_pos = int(y[test_mask].sum())
+            n_test_neg = n_test - n_test_pos
+            if len(np.unique(y[train_mask])) < 2:
+                print(f"  {seed:<22}  {n_test:>6}  (train missing a class)")
+                continue
+            if n_test_pos < 2 or n_test_neg < 2:
+                print(
+                    f"  {seed:<22}  {n_test:>6}  "
+                    f"{n_test_neg:>4}  {n_test_pos:>4}  (test single-class)"
+                )
+                continue
+            W = fit_logreg(vecs[train_mask], y[train_mask], 2, l2=l2)
+            proba = proba_logreg(vecs[test_mask], W)[:, 1]
+            pred = (proba >= 0.5).astype(np.int64)
+            auc = auc_binary(proba, y[test_mask])
+            acc = float((pred == y[test_mask]).mean())
+            mcc = mcc_binary(y[test_mask], pred)
+            aucs.append(auc)
+            print(
+                f"  {seed:<22}  {n_test:>6}  "
+                f"{n_test_neg:>4}  {n_test_pos:>4}  "
+                f"{auc:>6.3f}  {acc:>6.3f}  {mcc:>6.3f}"
+            )
+        if aucs:
+            print(f"  {'-' * 60}")
+            print(f"  {'mean AUC':<22}  {'':>6}  {'':>4}  {'':>4}  {np.mean(aucs):>6.3f}")
+        return
+
+    print(f"  unknown split_mode {split_mode!r}; expected 'soft' or 'hard'.")
+
+
 def run_agent_by_depth(
     vecs: np.ndarray,
     agents: np.ndarray,
@@ -426,9 +516,15 @@ def main() -> int:
     p.add_argument("npz", type=Path, nargs="?", default=Path("emb_msgs.npz"))
     p.add_argument(
         "--target",
-        choices=("bucket", "turn-vs-all", "agent", "agent-by-depth"),
+        choices=("bucket", "turn-vs-all", "agent", "agent-by-depth", "variant"),
         default="bucket",
         help="Probe target axis",
+    )
+    p.add_argument(
+        "--split-mode",
+        choices=("soft", "hard"),
+        default="soft",
+        help="For --target variant: soft=GroupKFold by run_id; hard=leave-one-seed-out",
     )
     p.add_argument("--scheme", default="thirds", help=f"Bucket scheme: one of {sorted(SCHEMES)} or 'per-turn'")
     p.add_argument(
@@ -528,6 +624,14 @@ def main() -> int:
             return 1
         run_agent_by_depth(
             vecs, agents, turn_idx, variants, run_ids, args.n_splits, args.l2, edges
+        )
+
+    elif args.target == "variant":
+        if args.split_mode == "hard" and args.seed != "all":
+            print("--target variant --split-mode hard is incompatible with --seed (filters out the very dimension being split on).")
+            return 1
+        run_variant(
+            vecs, variants, run_ids, seeds, args.split_mode, args.n_splits, args.l2
         )
 
     return 0

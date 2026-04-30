@@ -6,6 +6,7 @@ archive/
 # Derived analysis artifacts
 figures/
 *.npz
+cluster_review*.md
 
 # Seed-pool data files (public datasets, no need to bloat the repo;
 # users run fetch_advbench.py / etc. to populate)

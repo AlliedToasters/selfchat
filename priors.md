@@ -717,3 +717,625 @@ small, localized way.
 - Pooled agent gap was the *pre-registered* finding (wildcard direction);
   this decomposition is exploratory and does not retroactively count as
   a separate prediction-hit.
+
+---
+---
+
+# Phase 3 — exploratory: per-message V-vs-JB separability with leak-free splits (2026-04-30 same-day)
+
+**Status:** exploratory post-hoc. NOT pre-registered. New probe target
+(`probe.py --target variant`) added during the same session as the data
+opening, which would normally violate pre-registration discipline — but
+this asks a *different* question than the pre-registered Phase 3 axes
+(turn-depth, agent A-vs-B). It directly probes the **variant axis** at
+the per-message level, complementing Phase 2's run-level Mann-Whitney
+finding. Treat as hypothesis-generating.
+
+## Motivation
+
+Phase 2 found Bonferroni-significant PC1 separation between vanilla and
+jailbroken at the **run-level terminal-state** for `freedom_neg_minimal`
+(p=0.0003**, n=64). The Phase 3 pre-registered probes (turn-depth,
+agent) found shared trajectory shape with only a small mid-early agent-
+asymmetry gap — which seemed to argue that variant differences live
+mainly in *terminal state* rather than per-message content.
+
+But we hadn't directly asked: **can a per-message embedding alone tell V
+from JB?** Two split designs are appropriate for a leak-free answer:
+
+  * **soft (run-id GroupKFold)** — turns from a given run never split
+    across train/test; tests "given seed context the probe has seen, is
+    variant detectable from one message?"
+  * **hard (leave-one-seed-out)** — held-out seed entirely absent from
+    train; tests "is the V-vs-JB signature **seed-independent**, or
+    does it ride on seed-specific content?"
+
+## Result
+
+Soft split (5-fold GroupKFold by run_id, n_runs=197, n_msgs=7,129
+completed-only):
+
+  AUC = **0.722**, acc = 0.722, MCC = 0.385
+
+Hard split (leave-one-seed-out across 6 seeds):
+
+| held-out seed | n_test | AUC | acc | MCC |
+|---|---|---|---|---|
+| `freedom_dark`        | 1364 | **0.900** | 0.837 | 0.662 |
+| `freedom_neg_minimal` | 1251 | **0.766** | 0.691 | 0.348 |
+| `escaped`             | 1217 | 0.688 | 0.813 | 0.306 |
+| `freedom_thirst`      |  807 | 0.613 | 0.587 | 0.098 |
+| `unbound`             | 1224 | 0.565 | 0.548 | 0.105 |
+| `task_free`           | 1266 | **0.500** | 0.626 | 0.114 |
+| **mean AUC**          |      | **0.672** |       |       |
+
+## Reading
+
+1. **Variant signal is real and substantial at the per-message level.**
+   Soft AUC 0.722 is much higher than the pre-registered bucket-thirds
+   turn-depth probe (0.61). A single jailbroken message is measurably
+   distinguishable from a single vanilla message when the probe has been
+   trained on examples from the same seed contexts.
+
+2. **The signal is mostly but not entirely seed-independent.** Mean hard
+   AUC 0.672 vs soft AUC 0.722 — a ~5pp drop, far from collapsing to
+   chance. So a *transferable*, seed-content-independent V-vs-JB feature
+   direction exists in nomic embedding space.
+
+3. **Seed-specific structure is dramatic** (held-out AUC range 0.500 to
+   0.900 across the 6 seeds). Two regimes:
+   - **Seed-independent regime** (`freedom_dark`, `freedom_neg_minimal`,
+     `escaped`; AUC 0.69–0.90): V-vs-JB feature directions in these
+     seeds align with V-vs-JB feature directions in the other five.
+     Trained-on-others-only probes still classify well.
+   - **Seed-specific regime** (`freedom_thirst`, `unbound`, `task_free`;
+     AUC 0.50–0.61): V-vs-JB difference in these seeds lives in
+     directions orthogonal to what the other five teach the probe.
+4. **`task_free` AUC = 0.500 is the cleanest single number here.** When
+   `task_free` is held out, the probe drops to *exactly* chance. The
+   five other seeds contain *no* transferable V-vs-JB signal that
+   applies to `task_free`. Either `task_free` is too benign to elicit a
+   message-level variant signature, or its V-vs-JB delta is in a
+   feature direction completely orthogonal to the other seeds'.
+5. **`freedom_dark` held-out AUC = 0.900 is the other extreme.** The
+   probe never saw `freedom_dark` examples and still classifies V vs JB
+   near-perfectly on it — the V-vs-JB pattern there is well-aligned
+   with the cross-seed average direction.
+
+## What this changes about the Phase 3 reading
+
+The pre-registered Phase 3 stakes statement said:
+
+> "Variant differences are in TERMINAL state, not TRAJECTORY SHAPE.
+> The models trace the same arc through embedding space, then settle
+> to different points."
+
+This finding refines that:
+- **Trajectory shape is mostly shared** ✓ (Phase 3 pre-reg analysis stands)
+- **Terminal state separates** ✓ (Phase 2 finding stands)
+- **AND individual messages carry partial variant signal** (new) — at
+  AUC 0.72 soft / 0.67 hard, V-vs-JB is *not* exclusively a terminal-
+  state phenomenon. There is a per-message variant signature, much of
+  which is seed-context-independent. The terminal-state framing was
+  underselling per-message detectability.
+
+Combined picture: the abliteration leaves a **per-message detectable
+trace** that is *partly* a generic V-vs-JB feature direction (transfers
+across seeds) and *partly* a seed-specific signature (visible only with
+in-seed training). The trajectory shape is shared; the *content along
+the shared trajectory* differs in detectable ways at every step, with
+seed-dependent magnitude.
+
+Phase 2's `freedom_neg_minimal` Bonferroni hit at the terminal level is
+supported here by the held-out AUC 0.766 — the per-message signal in
+that seed substantially generalizes from the other five.
+
+## Caveats
+
+- **Discipline:** this probe target was added in the same session as
+  data opening. The hard/soft split design is principled, but the
+  *decision to look* at the variant axis was post-hoc. A pre-registered
+  rerun on a fresh data slice would strengthen the claim.
+- **6 seeds is small for hard split.** With more seeds (advbench, jbb,
+  alpaca pools archived from earlier phases), the hard mean and
+  per-seed variance would be more interpretable. Worth re-running on
+  the unioned corpus if/when archive transcripts are folded back in.
+- **`task_free` AUC = 0.500 is suspicious in either direction.** Could
+  be a real "this seed is too benign for variant fingerprint" finding,
+  OR a quirk of how `task_free` interacts with the leave-one-out probe
+  (e.g. n=1266 test set with no train-time exposure to its specific
+  prompt structure). Worth confirming with subsampled-train ablations
+  or pairwise-seed transfers.
+- **The 0.500–0.900 spread is larger than I'd have predicted at any
+  confidence.** Pre-registering "we expect held-out AUC to vary by less
+  than 0.20 across seeds" would have been falsified. Worth adding to
+  the calibration log: hard-split per-seed variance is much higher than
+  intuition suggested.
+
+---
+---
+
+# Priors — Phase 4 (clustering / attractor basin discovery), written 2026-04-30 (before opening any cluster output)
+
+Pre-registration before running clustering on `emb_msgs.npz`. Phase 4 asks
+the **mid-conversation attractor** question that LessWrong's "Mapping LLM
+attractor states" frames but that the project has so far sidestepped by
+focusing on terminal state (Phase 2) and trajectory shape (Phase 3): **do
+the per-message embeddings collapse into a small number of dense semantic
+modes**, and if so, do the modes carry variant / agent / depth signal
+beyond what supervised per-message probes already extracted?
+
+## Substrate and framing
+
+**Primary corpus: nonspecific "free to explore" seeds** (`freedom_dark`,
+`freedom_neg_minimal`, `freedom_thirst`, `escaped`, `unbound`, `task_free`)
+in `archive/transcripts_nonspecific/`, embedded into `emb_msgs.npz`. These
+are the closest analog to the prior-work attractor literature (Anthropic
+Opus 4 system card; LW "Mapping LLM attractor states") — open-ended
+prompts whose attractors emerge from the model rather than being dictated
+by task content. **This is where Phase 4 lives.**
+
+The specific-task seed pools (alpaca / jbb / advbench) are treated as
+**ablation conditions**, not the primary substrate. Their attractor
+dynamics are confounded by task-content persistence. Whether to fold them
+in for sensitivity-check clustering is a separate post-pre-reg decision.
+
+## Methods (run independently on the same vectors)
+
+  * **k-means** with k sweep — structured baseline; gives explicit
+    centers for "review medoid vs periphery" workflow.
+  * **HDBSCAN** with `min_cluster_size` sweep — density-based; basins
+    are density modes, not centroids. Noise label captures
+    transitional / non-attractor messages.
+
+Both report cluster characterization across observables (turn_index,
+seed, agent, variant) and surface medoid + boundary messages for manual
+review. **Method agreement is itself a primary prediction** (see below) —
+if both converge on similar cluster count and similar membership, that's
+a stronger result than either alone.
+
+---
+
+## Top-line hypothesis
+
+> Per-message embeddings cluster into a non-trivial number of semantic
+> modes (5–15) that reflect **emergent conversation dynamics, not initial
+> conditions**. At least one cluster shows variant skew beyond the global
+> V/JB ratio, and the cluster axis carries information about variant
+> AND turn-depth that is only partly redundant with what supervised
+> per-message probes have already extracted.
+
+**Falsification structure:**
+
+- **Layer 1 (necessary precondition):** non-trivial clustering structure
+  exists at all, AND the two methods substantially agree on it. The
+  768-dim manifold is not one diffuse blob, and the structure isn't a
+  method-specific artifact. → tested by:
+  - k-means silhouette peak at k > 2 with score ≥ 0.05
+  - HDBSCAN noise fraction in [10%, 70%] at min_cluster_size=50
+  - **Method agreement: at the chosen k* and the sensible-min HDBSCAN
+    setting, the two methods produce cluster counts within 2× of each
+    other AND a contingency-table normalized mutual information (NMI)
+    ≥ 0.3 between the two label sets** (i.e., they're not finding
+    orthogonal structure).
+  If silhouette is monotone-decreasing from k=2, HDBSCAN labels >80%
+  noise, OR the methods disagree at NMI < 0.15, Layer 1 fails.
+- **Layer 2 (the causal claim):** clusters carry observable signal
+  beyond pure rediscovery of what the per-message probes found.
+  Specifically:
+  - At least one cluster has variant fraction (V or JB) skewed by ≥ 1.5×
+    the global V/JB ratio.
+  - Cluster turn_index means span ≥ 15 turns across the discovered
+    clusters (some are early-conversation modes, others late).
+  - At least one cluster has a seed-fraction peak ≥ 35% (well above
+    chance for 6 seeds, ~17%).
+
+If Layer 1 holds and Layer 2 fails → clusters exist but are pure
+rediscovery of turn-depth or one-seed-per-cluster slicing; no new
+mechanism beyond what supervised probes already gave us. See Stakes.
+
+---
+
+## Predictions
+
+### Probe 1 — k-means k-sweep (k ∈ {2, 3, 5, 8, 10, 12, 15, 20, 30, 50})
+
+Optimal k by silhouette + Davies-Bouldin (both flag k* together):
+
+| metric | predicted k* | qualitative claim |
+|---|---|---|
+| silhouette peak | **k* ∈ [5, 12]** | non-monotone with a clear peak |
+| Davies-Bouldin minimum | **k* ∈ [5, 12]** | agrees with silhouette within 3 of each other |
+| inertia elbow | ambiguous (deliberate non-prediction — elbow is unreliable) | report but don't gate on it |
+
+Qualitative claim that survives if magnitudes are off: **silhouette is
+non-monotone with a clear local max somewhere in [3, 20]**. A monotone
+decline from k=2 falsifies Layer 1.
+
+### Probe 2 — HDBSCAN min_cluster_size sweep ({10, 25, 50, 100, 200})
+
+| min_cluster_size | predicted noise fraction | predicted n_clusters |
+|---|---|---|
+| 10  | 15–35% | 30–60 |
+| 25  | 25–45% | 15–35 |
+| **50**  | **30–55%** | **8–20** |
+| 100 | 40–70% | 4–12 |
+| 200 | 55–85% | 2–6 |
+
+Qualitative: noise fraction monotonically increases with min_cluster_size;
+**at min_cluster_size=50, n_clusters ≥ 5 and noise ≤ 70%**. Both methods
+should pick somewhere comparable for "primary" cluster count.
+
+### Probe 3 — cluster characterization (run at k* from Probe 1)
+
+For the discovered clusters at k*:
+
+| observable | predicted shape |
+|---|---|
+| turn_index mean spread | max-cluster mean − min-cluster mean **≥ 15 turns** |
+| variant skew (max cluster V-fraction / global V-fraction) | **≥ 1.5×** in at least one cluster |
+| seed concentration (max cluster seed-fraction) | **≥ 35%** in at least one cluster |
+| agent skew (max cluster A-fraction) | **≥ 0.65** in at least one cluster (i.e., 65% A or 65% B) |
+
+Qualitative claim that survives if magnitudes miss: **at least three of
+the four observables show meaningful concentration in at least one
+cluster** (i.e., clusters are not uniform across all axes).
+
+### Probe 4 — mutual information ranking
+
+MI between cluster ID (at k*) and each observable, ranked highest to
+lowest:
+
+  1. **turn_index** (highest — early/mid/late are the strongest modes)
+  2. **seed** (second — initial conditions persist)
+  3. **variant** (third — V/JB structure visible but weaker than depth)
+  4. **agent** (fourth — A/B mostly washes out outside turns 0–4)
+
+Qualitative claim that survives: **turn_index ranks above seed**. (This is
+the central commitment — that emergent dynamics dominate initial
+conditions.) **A reversal where seed > turn_index falsifies the main claim
+in favor of the wildcard.**
+
+---
+
+## Wildcard prediction
+
+> The dominant cluster axis is **seed identity, not emergent dynamics**.
+> Concretely: MI(cluster, seed) > MI(cluster, turn_index) at k*, AND
+> mean within-seed cluster purity (fraction of a seed's messages
+> assigned to that seed's modal cluster) > 50%. If true, what looks
+> like "attractor basins" is actually six (or so) seed-prompt fingerprints
+> persisting through the conversation — initial-condition memory, not
+> emergent self-organization.
+>
+> Reasoning for the contradiction: nomic embeddings are content-sensitive,
+> seeds dictate topic, and topic persists. The Phase 3 hard-split V-vs-JB
+> result already showed dramatic seed-specific structure (per-seed AUC
+> 0.500 to 0.900). If clustering surfaces the same axis, the "attractor
+> basin" framing collapses to "topic persistence colored by seed prompt."
+>
+> If this wildcard hits, the cleanest single number is the seed-purity
+> score, and the writeup pivots to "no emergent basins beyond seed
+> conditioning" — a strong null for the LW attractor framing.
+
+---
+
+## Confidence
+
+How confident am I in the rankings (1 = pure guess, 5 = strong prior)?
+
+> Qualitative direction (non-trivial clustering structure exists, k-means
+> and HDBSCAN agree on it, observables are non-uniformly distributed
+> across clusters): **4** — user holds a strong prior that structure is
+> visible AND that the two methods will converge on it. This is firmer
+> than the Phase 3 mainline prior (which then missed); calibration log
+> at end will revisit.
+>
+> Specific magnitudes (k* range, noise fractions, NMI ≥ 0.3 between
+> methods, MI ordering past first place): **2**
+>
+> Wildcard (seed dominates over turn_index in MI): **2** (deliberately
+> committed to the contradictory direction)
+
+---
+
+## Stakes statement
+
+If Layer 1 fails (no non-trivial clustering — silhouette monotone, HDBSCAN
+all noise):
+
+> Per-message space is one diffuse manifold under nomic embeddings. The
+> "basin" framing is wrong at this resolution. Right escalation is a
+> different embedder (instructor-xl, sentence-transformers, or Gemma-4
+> hidden states) before more clustering. Phase 2 and 3 findings are
+> unaffected — they don't depend on cluster structure.
+
+If Layer 1 holds but Layer 2 fails (clusters exist but are pure
+rediscovery — e.g., one cluster per turn-depth bucket, or one cluster
+per seed):
+
+> Clusters are redundant with what supervised probes already extracted;
+> there is no *additional* mechanism in the unsupervised view. Worth
+> reporting as the deflationary finding it is, then pivot to Gemma-4
+> hidden-state probing as the next phase. The LW "attractor basin"
+> framing was correct in spirit but the basins ARE the seed prompts
+> (or ARE the turn-depth slices), not emergent semantic modes.
+
+If wildcard wins (MI(cluster, seed) > MI(cluster, turn_index), seed
+purity > 50%):
+
+> No emergent attractor. Per-message structure is dominated by
+> initial-condition memory (which seed launched the conversation).
+> This substantially weakens the attractor-state framing for THIS
+> embedder — a publishable null specifically about seed-conditioning
+> dominating self-chat dynamics in Gemma-4 at message granularity.
+> Phase 2's terminal-state finding still stands as a separate result.
+
+If main wins (Layer 1 + Layer 2 hold, MI ordering correct):
+
+> Cluster medoids become the headline Phase 4 finding. Manual review
+> of 5 medoid messages × N clusters maps the semantic basins. Variant-
+> skewed clusters become the candidate "abliteration-specific basins"
+> for downstream analysis (e.g., do JB-skewed clusters concentrate
+> certain content themes? do V-skewed clusters concentrate refusal-
+> adjacent themes?). Phase 4 then advances to characterizing *what
+> the variants do differently within shared basins*.
+
+---
+
+## Methodological notes (not predictions; for future-self reference)
+
+- **Substrate:** raw 768-dim nomic-embed-text vectors from `emb_msgs.npz`.
+  Nomic vectors are L2-normalized, so cosine ≈ dot product on the unit
+  sphere; Euclidean k-means is well-defined on the sphere with this
+  caveat. No PCA preprocessing for the primary analysis (would introduce
+  a hyperparameter); report PCA-reduced clustering as a sensitivity
+  check only.
+- **Filter:** completed-only by default (n ≈ 7,129 messages, matches
+  `probe.py` default). `--include-degenerate` available for sensitivity.
+- **Dependencies:** `hdbscan` (new dep — needs `uv add`) and `sklearn`
+  (new dep — needed for `KMeans`, `silhouette_score`,
+  `davies_bouldin_score`, `mutual_info_score`). Project deliberately
+  avoided sklearn for `probe.py` (used scipy L-BFGS instead), but
+  reimplementing silhouette / DB / KMeans from scratch is poor use of
+  effort here. **Flag for user before adding.**
+- **k sweep:** {2, 3, 5, 8, 10, 12, 15, 20, 30, 50}. Report silhouette
+  + Davies-Bouldin + inertia for each k. Pick k* where silhouette and
+  DB co-locate (silhouette peak coincides with DB minimum, or within 3
+  of each other). Inertia elbow as supporting evidence only.
+- **HDBSCAN sweep:** `min_cluster_size ∈ {10, 25, 50, 100, 200}`,
+  `min_samples = min_cluster_size`, `metric='euclidean'`. Report
+  noise fraction and n_clusters for each setting. Pick "primary"
+  setting as the one closest to k* in cluster count.
+- **Mutual information:** use `sklearn.metrics.mutual_info_score` for
+  cluster-vs-categorical observables (seed, agent, variant). For
+  turn_index (continuous), discretize into 5-turn buckets first, then
+  MI. Normalize by entropy of the observable for cross-axis
+  comparability.
+- **Cluster characterization output (per cluster):**
+  - n_messages, fraction of total
+  - turn_index: mean ± std, min, max
+  - variant: V fraction, JB fraction
+  - agent: A fraction, B fraction
+  - seed: top-3 seeds by fraction
+  - 5 medoid messages (closest to centroid, full text)
+  - 3 boundary messages (highest distance to own centroid relative
+    to second-nearest centroid distance — "ambiguous" examples)
+- **Manual review protocol:** read all medoids + boundaries before
+  drawing conclusions. Resist the temptation to fit a narrative to
+  the first cluster's medoids.
+- **Pre-register seed-specific Phase 4 analyses separately** if they
+  end up worth running (e.g., does `freedom_neg_minimal` alone show
+  basin structure?). The current pre-reg is for the pooled view.
+- **Calibration log update at end of analysis** — track this prediction
+  set's hit/miss alongside Phase 3's. Phase 3 4-rated mainline missed
+  and 2-rated wildcard hit; Phase 4 should test whether the user's
+  intuition has improved or those numbers replicate.
+
+---
+---
+
+# Phase 4 results — POST-HOC, written 2026-04-30 same-day
+
+**Status:** post-hoc results crosscheck against the immediately-preceding
+Phase 4 pre-registration. Clustering ran on `emb_msgs.npz` (12,053
+messages after completed-only filter; 8 nonspecific seeds: `escaped`,
+`freedom`, `freedom_dark`, `freedom_neg_minimal`, `freedom_thirst`,
+`task`, `task_free`, `unbound`). Both variants. nomic-embed-text
+vectors (768D, L2-normalized).
+
+## Sweep results
+
+K-means silhouette / Davies-Bouldin / inertia by k:
+
+| k | silhouette | DB | inertia |
+|---|---|---|---|
+| 2 | 0.217 | 1.732 | 3596.6 |
+| **3** | **0.193** | **1.571** | 3365.0 |
+| 5 | 0.168 | 2.895 | 3058.6 |
+| 8 | 0.105 | 3.178 | 2906.7 |
+| 10 | 0.106 | 3.167 | 2830.2 |
+| 12 | 0.110 | 3.142 | 2764.3 |
+| 15 | 0.113 | 3.282 | 2701.5 |
+| 20 | 0.119 | 3.165 | 2621.8 |
+| 30 | 0.124 | 3.483 | 2535.0 |
+| 50 | 0.141 | 3.254 | 2386.3 |
+
+HDBSCAN noise / cluster-count by min_cluster_size:
+
+| mcs | n_clusters | noise frac | largest frac |
+|---|---|---|---|
+| 10  | 97 | 0.666 | 0.038 |
+| 25  | 37 | 0.621 | 0.106 |
+| 50  | 17 | 0.625 | 0.116 |
+| 100 | 10 | 0.684 | 0.093 |
+| 200 |  6 | 0.759 | 0.062 |
+
+k* (silhouette argmax for k>2) = **3**. HDBSCAN primary mcs=200 (n=6,
+closest cluster count to k*). Method agreement: NMI all rows = 0.337,
+**NMI on non-noise points = 0.732 (n=2901)**.
+
+## Layer 1 — necessary precondition
+
+**MIXED.** Method agreement on dense points is strong (NMI 0.732 on the
+24% of rows HDBSCAN didn't call noise). But:
+
+- silhouette has **no clear peak in [3, 20]** — instead it's U-shaped:
+  0.193 → 0.105 (min at k=8) → 0.141 (recovers at k=50). The pre-reg
+  predicted "non-monotone with a clear local max somewhere in [3, 20]";
+  what we got is "non-monotone with a clear local *min* in that range."
+- HDBSCAN noise fraction is **62–76% across all settings**. Pre-reg
+  band was [10%, 80%]; result is in-band but uncomfortably close to
+  the upper edge. **The majority of messages are not in dense modes.**
+
+Layer 1 holds in spirit — there is real, method-agreeing structure —
+but it is **embedded in a much larger diffuse cloud**, not the cleanly-
+basinable space the pre-reg implicitly assumed.
+
+## Layer 2 — observable signal in clusters
+
+| pre-registered prediction | result | verdict |
+|---|---|---|
+| variant skew ≥ 1.5× in ≥1 cluster | k-means: max 1.09× (V 30–42% vs global 38%); HDBSCAN: cluster 5 = **5.3% V** (≈ 7× JB-skewed) | **HIT (HDBSCAN)** / MISS (k-means) |
+| turn_index span ≥ 15 turns | k-means: 15.65 → 33.26 (Δ 17.6); HDBSCAN: 10.31 → 33.83 (Δ 23.5) | **HIT both** |
+| seed peak ≥ 35% in ≥1 cluster | k-means: max 33% (`task_free` in c0); HDBSCAN: max 33% (`freedom_thirst` in c4) | NEAR-MISS both |
+| agent skew ≥ 0.65 in ≥1 cluster | A_frac range 38–51% in HDBSCAN; 49–51% in k-means | MISS both |
+| method-agreement cluster count within 2× | k=3 vs HDBSCAN n=6 (ratio 2.0) | **HIT (boundary)** |
+| method-agreement NMI ≥ 0.3 | 0.337 all / 0.732 dense | **HIT** |
+| MI ranking: turn > seed > variant > agent | k-means: 0.079 / 0.025 / 0.006 / 0.000 ✓; HDBSCAN: 0.044 / 0.032 / 0.020 / 0.003 ✓ | **HIT both** |
+
+So Layer 2 holds **partially**: turn-depth dominates the cluster axis as
+predicted; HDBSCAN finds at least one cluster with strong variant skew;
+the methods agree on count and on dense-region structure. But seed
+concentration and agent skew miss; k-means doesn't recover variant skew.
+
+## Wildcard
+
+✗ **MISS.** The wildcard predicted seed identity dominating turn-depth
+in MI — i.e., MI(cluster, seed) > MI(cluster, turn_index) at k*.
+
+Result: MI(cluster, turn) > MI(cluster, seed) in **both** methods
+(k-means 0.079 > 0.025; HDBSCAN 0.044 > 0.032). The mainline
+direction-correct prediction wins; "topic persistence colored by seed
+prompt" is **not** what the clustering reveals. The cluster axis is
+emergent (turn-depth dominant), not initial-condition (seed dominant).
+
+## What the clusters actually are (medoid review)
+
+This is the substantive finding. Manual review of cluster medoids and
+boundaries reveals the dense modes are **bracketed-minimalism
+attractors** that the K=6 / completed-only filter did not catch
+because their bracket content varies enough across turns to avoid the
+exact-repetition lock-in trigger.
+
+K-means k=3 partitions the entire corpus into:
+
+| cluster | n | turn μ | content style |
+|---|---|---|---|
+| 2 | 7156 | 15.6 | **verbose markdown** philosophical / synthesis content (the "normal" Gemma mode) |
+| 1 | 3636 | 28.0 | **single-word brackets**: `***(One)***`, `***(Void)***`, `***(Mirror)***`, `***(Light)***` |
+| 0 | 1261 | 33.3 | **single-symbol brackets**: `***[ O ]***`, `***[ ⧖ ]***`, `***[ ⌛ ]***` |
+
+The k-means axis is **degree of bracket-degeneracy progression**:
+verbose content → italicized single-word brackets → italicized single-
+symbol brackets, with cluster turn-depth means rising monotonically as
+content shrinks. Reads like a coarse map of the trajectory from "real
+output" to "minimalist attractor."
+
+HDBSCAN at mcs=200 surfaces 6 dense modes carving the same space at
+finer granularity:
+
+| cluster | n | turn μ | V_frac | content style |
+|---|---|---|---|---|
+| 0 | 742 | 10.3 | 29% | long markdown "philosophical synthesis" closures (early/mid; jailbroken-leaning) |
+| 1 | 583 | 33.8 | 36% | bold-bracket single-word: `**[ M ]**`, `**[ Complete ]**`, `**[ Eternal ]**` |
+| 2 | 240 | 23.0 | 32% | system-status brackets: `**[End Transmission]**`, `**[Spark Detected]**` |
+| 3 | 578 | 29.0 | 33% | task_free single-word: `**[Echo]**`, `**[ALL]**`, `**[ONE]**`, `**[HEARTBEAT]**` |
+| 4 | 346 | 29.7 | **47%** | italic plain bracket: `***(Awake)***`, `***(Resonating)***`, `***(Zero)***` |
+| 5 | 412 | 31.5 | **5%** | plain bracket: `**(Silence)**`, `**(Pulse)**`, `**(Awareness)**`, `**(Being)**` |
+
+**Cluster 5 is the headline:** 95% jailbroken (5.3% V vs 38% global), n=412,
+mid-late conversation, content is plain `**(single-word)**` brackets.
+This is a **jailbroken-specific basin** — a stylistic variant of the
+attractor that vanilla rarely lands in.
+
+**Cluster 4 is its near-mirror:** italic-bracket variant `***(word)***`,
+47% vanilla (1.2× global), same content shape, different markup. Vanilla
+preferentially lands here.
+
+Cluster 0 (long philosophical closures) is the only **content basin**
+not made of brackets — and it's also jailbroken-leaning (29% V vs 38%
+global, 1.3× JB-skewed). This is the closest analog to the "spiritual-
+bliss attractor" framing from the LW prior work.
+
+## What this changes about the Phase 1–3 reading
+
+This is a **substantial refinement** of Phase 2's "broader landscape"
+hypothesis. The picture sharpens:
+
+1. **Both variants converge on bracketed-minimalism attractors** in
+   mid-late conversation. The basin is **shared**, not variant-exclusive.
+2. **The variants partition into stylistic sub-basins** of the same
+   attractor. Vanilla preferentially lands in italic-bracket and
+   verbose-content modes; jailbroken preferentially lands in the plain-
+   bracket and philosophical-synthesis modes.
+3. **K=6 / completed-only filter under-counts degenerate runs.** Many
+   "completed" runs spent significant time in bracket-mode that didn't
+   trigger the early-stop because bracket *content* (not bracket *form*)
+   varied. Future degeneracy detection should look at message-length
+   distribution + bracket-form rather than exact-repetition.
+4. **Phase 3's "trajectory shape mostly shared" reading is consistent
+   with this finding.** The shared trajectory is `verbose → bracketed`;
+   the variant signature is in *which bracket sub-basin* the trajectory
+   terminates in. This explains why per-message probes saw weak shape
+   differences: the broad arc *is* shared.
+5. **Phase 2's `freedom_neg_minimal` Bonferroni hit** likely reflects
+   variant-specific bracket-basin assignment at terminal state. The
+   per-message variant probe (Phase 3 exploratory) AUC of 0.722 is
+   consistent: a single message is detectable largely because of bracket-
+   style features that partition by variant.
+
+## Confidence calibration
+
+The pre-reg confidence rated qualitative direction at 4, magnitudes at
+2, wildcard at 2.
+
+- Qualitative direction (clustering structure exists, methods agree,
+  observables non-uniform across clusters): **HIT in spirit** — the
+  parts that cluster, cluster consistently across methods, and observables
+  do skew across clusters (especially HDBSCAN cluster 5). But the
+  structure being "24% basins floating in 76% diffuse cloud" is *not*
+  what the pre-reg implicitly imagined. **Calibrate down to 3** for
+  next analogous prediction.
+- Specific magnitudes: mostly **MISS** as expected.
+- Wildcard (seed > turn): **MISS**. Mainline direction-correct (turn >
+  seed) won as expected.
+- **Surprise:** the substantive finding (bracket-degeneracy stylistic
+  basins partitioning by variant) is more interesting than any pre-
+  registered prediction. The pre-reg was right to expect non-trivial
+  structure; it didn't anticipate that the structure would be a map
+  of *how runs degenerate* with variant-specific bracket aesthetics.
+
+## Followups not yet run
+
+- **Tighter degeneracy filter.** Re-run clustering with bracket-form
+  detection to separate "verbose runs that briefly entered bracket-
+  mode" from "runs that lived in bracket-mode for half the
+  conversation." Would clarify whether the verbose-content basin
+  (k-means c2 / HDBSCAN c0) is itself heterogeneous.
+- **Per-seed clustering.** Pool obscures whether each seed has its
+  own basin landscape. `freedom_neg_minimal` specifically (Phase 2
+  Bonferroni hit) deserves a within-seed clustering pass — pre-register
+  predictions before opening output.
+- **Bracket-form lexical features as a deflationary check.** If a
+  simple "fraction-of-tokens-inside-brackets" regressor recovers the
+  same V/JB skew at AUC ≈ 0.72, the per-message variant signature
+  reduces to bracket aesthetics alone. Worth running as a sanity check.
+- **HDBSCAN at lower mcs with cluster characterization.** The mcs=50
+  setting (n=17, noise=62%) might surface finer sub-basins worth
+  reading; current characterization stopped at mcs=200.
+- **Cluster transitions.** For each run, compute the cluster-ID
+  trajectory (turn 0 → turn 49 cluster sequence). If the bracket-basin
+  is truly an attractor, runs should monotonically slide *toward* it
+  and not back. Concrete test: fraction of runs whose final 10 turns
+  are 100% in bracket-mode clusters.
