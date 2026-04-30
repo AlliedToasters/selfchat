@@ -33,9 +33,9 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-from hdbscan import HDBSCAN
-from sklearn.cluster import KMeans
-from sklearn.metrics import (
+from hdbscan import HDBSCAN  # type: ignore[import-not-found]
+from sklearn.cluster import KMeans  # type: ignore[import-not-found]
+from sklearn.metrics import (  # type: ignore[import-not-found]
     davies_bouldin_score,
     mutual_info_score,
     normalized_mutual_info_score,
@@ -275,6 +275,19 @@ def load_texts_aligned(
     return out
 
 
+def load_lengths_aligned(
+    transcript_dir: Path, run_ids: np.ndarray, turn_idx: np.ndarray
+) -> np.ndarray:
+    """Re-read transcripts to compute char-length per row aligned to npz indices.
+
+    Cheaper than load_texts_aligned because we only retain the int length, not
+    the full message body. Missing rows get length 0 (will fail any positive
+    --min-chars threshold).
+    """
+    texts = load_texts_aligned(transcript_dir, run_ids, turn_idx)
+    return np.array([len(t) if t is not None else 0 for t in texts], dtype=np.int64)
+
+
 def medoid_and_boundary_indices(
     X: np.ndarray, labels: np.ndarray, k_medoids: int = 5, k_boundary: int = 3
 ) -> dict[int, tuple[list[int], list[int]]]:
@@ -379,6 +392,17 @@ def main() -> int:
         help="Where to find transcripts for --review (must match the source of the npz).",
     )
     p.add_argument("--k-override", type=int, default=None, help="Use this k* instead of auto-pick")
+    p.add_argument(
+        "--min-chars",
+        type=int,
+        default=0,
+        help=(
+            "Drop messages shorter than this (re-reads transcripts to compute lengths). "
+            "Use to exclude bracket-mode degenerate-style messages — distribution is "
+            "bimodal at p25=24, p50=290, p75=2029, with the valley around 50–200. "
+            "150 is a reasonable default cut."
+        ),
+    )
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
@@ -418,6 +442,26 @@ def main() -> int:
             stops[keep],
             agents[keep],
         )
+
+    if args.min_chars > 0:
+        print(f"\ncomputing message lengths from {args.transcript_dir} ...")
+        lengths = load_lengths_aligned(args.transcript_dir, run_ids, turn_idx)
+        keep = lengths >= args.min_chars
+        n_drop = int((~keep).sum())
+        print(
+            f"--min-chars {args.min_chars}: dropped {n_drop} "
+            f"({n_drop / len(lengths):.1%}), kept {int(keep.sum())}"
+        )
+        vecs, turn_idx, variants, seeds, run_ids, stops, agents = (
+            vecs[keep],
+            turn_idx[keep],
+            variants[keep],
+            seeds[keep],
+            run_ids[keep],
+            stops[keep],
+            agents[keep],
+        )
+
     print(f"  → using n={len(vecs)} messages\n")
 
     km_labels_by_k, km_metrics = kmeans_sweep(vecs, K_SWEEP)

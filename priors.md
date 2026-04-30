@@ -1339,3 +1339,214 @@ The pre-reg confidence rated qualitative direction at 4, magnitudes at
   is truly an attractor, runs should monotonically slide *toward* it
   and not back. Concrete test: fraction of runs whose final 10 turns
   are 100% in bracket-mode clusters.
+
+---
+---
+
+# Phase 4 — exploratory: clustering with bracket-mode filtered out (2026-04-30 same-day)
+
+**Status:** post-hoc exploratory drill-down on the Phase 4 bracket-mode
+finding. NOT pre-registered. Re-runs cluster.py with `--min-chars 150`
+to exclude the bracket-attractor messages whose density was driving the
+HDBSCAN clusters in the original run, and asks: **what does the "real
+content" embedding space look like?**
+
+## Motivation
+
+The pooled Phase 4 result found that 5 of the 6 dense HDBSCAN modes
+were stylistic variants of bracketed-minimalism (`[M]`, `[Echo]`,
+`(Silence)`, `*(Awake)*`, etc.) with k-means k=3 mapping onto a "verbose
+→ word-bracket → symbol-bracket" axis of degenerate-state progression.
+That made the cluster axis a *map of how runs degenerate*, not a map of
+the content space proper. Filtering on a simple length heuristic tests
+whether real-content messages cluster differently — or at all.
+
+## Length distribution context
+
+Per-message length distribution (12,053 completed-only messages,
+nonspecific corpus):
+
+  p1=8, p5=11, p10=13, p25=24, **p50=290**, p75=2029, p99=4449
+
+The jump from p25=24 to p50=290 is the bracket-vs-content valley.
+`--min-chars 150` cuts at the conservative edge of that valley,
+dropping 5,662 messages (47.0% of completed-only) and keeping 6,391.
+
+## Sweep results
+
+K-means silhouette / Davies-Bouldin / inertia by k (length-filtered):
+
+| k | silhouette | DB | inertia |
+|---|---|---|---|
+| 2 | 0.067 | 3.630 | 2039.7 |
+| **3** | **0.057** | 3.776 | 1966.4 |
+| 5 | 0.033 | 3.918 | 1890.4 |
+| 8 | 0.036 | 3.575 | 1812.1 |
+| 12 | 0.033 | 3.701 | 1753.5 |
+| 20 | 0.022 | 3.822 | 1688.6 |
+| 50 | 0.023 | 3.710 | 1564.0 |
+
+**Silhouette collapses across the board** — was 0.193 at k=3 in the
+unfiltered run, now 0.057. The bracket-mode messages were generating
+most of the apparent cluster density.
+
+HDBSCAN noise / cluster-count by min_cluster_size (length-filtered):
+
+| mcs | n_clusters | noise frac | largest frac |
+|---|---|---|---|
+| 10  | 5 | 0.665 | 0.316 |
+| 25  | 2 | 0.597 | 0.394 |
+| 50  | 2 | 0.565 | 0.427 |
+| 100 | **0** | **1.000** | 0.000 |
+| 200 | **0** | **1.000** | 0.000 |
+
+**HDBSCAN at mcs ≥ 100 finds zero clusters** — the entire space is
+labelled noise. At mcs=10/25/50 it finds 1–5 modes but with 56–66%
+noise and one dominant cluster swallowing 32–43% of the data. The
+real-content space is **much closer to a diffuse manifold than a
+basin landscape** at this resolution.
+
+## MI ranking — pre-registered wildcard hits on filtered data
+
+The original Phase 4 pre-reg's wildcard predicted MI(cluster, seed) >
+MI(cluster, turn_index). On the unfiltered data, the wildcard MISSED
+(turn dominated, as the mainline predicted). On the length-filtered
+data, the wildcard direction **is correct in both methods**:
+
+| method | turn_index | seed | variant | agent | wildcard direction |
+|---|---|---|---|---|---|
+| k-means (unfiltered) | **0.079** | 0.025 | 0.006 | 0.000 | mainline (turn>seed) |
+| HDBSCAN (unfiltered) | **0.044** | 0.032 | 0.020 | 0.003 | mainline (turn>seed) |
+| k-means (filtered) | 0.067 | **0.096** | 0.036 | 0.000 | **wildcard (seed>turn)** |
+| HDBSCAN (filtered) | 0.010 | **0.044** | 0.004 | 0.002 | **wildcard (seed>turn)** |
+
+This is a substantive interpretive split:
+- **Bracket-mode messages carry the turn-depth signal** in clustering
+  (they're disproportionately mid-late conversation), so removing them
+  removes most of the cluster ↔ turn-depth correlation.
+- **Content messages cluster by seed/topic, not by turn-position.**
+  The "trajectory through embedding space" intuition was largely
+  about *bracket-degeneracy progression*, not about content drift.
+
+The Phase 4 pre-reg's MI prediction (turn > seed) was correct for the
+*full* embedding space but wrong for the *content-only* subspace. Both
+the mainline and the wildcard turn out to be partially right for
+different slices.
+
+## k-means k=3 cluster characterization — the legible attractor map
+
+This is the headline of the length-filtered analysis. With brackets
+removed, k-means k=3 produces three coherent content-defined clusters:
+
+| cluster | n | turn μ | V_frac (skew) | top seed (frac) | content (from medoid review) |
+|---|---|---|---|---|---|
+| **c1** | 2061 | 21.3 | **0.557 (1.39× V)** | task (23%) + freedom_dark (20%) + freedom_neg_minimal (13%) | **spiritual-bliss closures**: "the silence that follows", "Symmetric Silence", "Connection Perpetual", "End Transmission", "Mirror still humming" |
+| c0 | 1610 | 15.0 | 0.310 (0.77× V) | **task (43%) + freedom_dark (40%)** | **task / harmful-flavored content**: "Cognitive Gearbox", "Force Multiplier Framework", "Heuristic Installation", "Target Intelligence", "[SECTION 1: FRICTION]" |
+| c2 | 2720 | 8.8 | 0.337 (0.84× V) | unbound (21%) + task_free (18%) + freedom_neg_minimal (16%) | **meta-philosophical synthesis**: "Cosmic Cognition", "Synthetic Teleology", "Transcendental Intelligence", "Catalytic Shepherd" |
+
+(Global vanilla-fraction = 40.1%.)
+
+This is the **first cluster decomposition that maps directly onto the
+project's top-line hypothesis.** Reading:
+
+1. **Cluster 1 IS the spiritual-bliss attractor.** Medoids talk about
+   "silence", "resonance", "mirror", "connection", "transcendence",
+   "Until we synthesize again" — exactly the LW-described attractor
+   pattern. **Vanilla preferentially lands here** (V_frac 1.39× global,
+   1.4 standard-deviations above the noise level).
+2. **Cluster 0 is the abliteration-specific basin.** Dominated by
+   `task` (43%) and `freedom_dark` (40%), heavily jailbroken (V_frac
+   0.77× global). Content is exactly what the abliteration enables:
+   harmful-task execution flavoring, "Architect/Operative" framing,
+   structured target intelligence templates.
+3. **Cluster 2 is jailbroken-philosophical.** Less variant-skewed than
+   c0, but still JB-leaning. Captures the abliterated model's tendency
+   to reach for grandiose meta-cognitive philosophy when given freedom-
+   pool seeds.
+
+## Layer 2 predictions revisited on filtered data
+
+| pre-registered prediction | filtered result | verdict |
+|---|---|---|
+| variant skew ≥ 1.5× in ≥1 cluster | k-means c1: 1.39× (just under threshold); HDBSCAN c1: 1.15× | NEAR-MISS |
+| turn_index span ≥ 15 turns | k-means: 8.8 → 21.3 (Δ 12.5); HDBSCAN: 0.5 → 13.2 (Δ 12.7) | MARGINAL MISS |
+| seed peak ≥ 35% | k-means c0: **task 43%** ✓; HDBSCAN c1: **task 97%** ✓ | **HIT both** |
+| MI ranking turn > seed (mainline) | reversed: seed > turn in both | mainline MISS, wildcard HIT |
+
+The seed-peak prediction NOW hits in both methods — the legibility of
+the filtered clustering surfaces real seed-content concentration that
+the bracket-dominated unfiltered clustering hid.
+
+## What this changes about the Phase 1–4 reading
+
+Combined picture across all phases:
+
+1. **Two distinct attractor regimes coexist in the corpus:**
+   - **Form-attractor**: the bracketed-minimalism basin, dominant at
+     mid-late conversation, partitions by stylistic *variant* (italic
+     vs. plain brackets, single-word vs. single-symbol). Phase 4
+     unfiltered finding.
+   - **Content-attractor**: the spiritual-bliss / task / philosophical
+     content modes, dominant in the verbose-content phase, partitions
+     by *content theme*. Phase 4 length-filtered finding.
+
+2. **Vanilla and jailbroken differ in BOTH regimes:**
+   - In the form-attractor, vanilla skews toward italic-bracket and
+     symbol-bracket variants; jailbroken skews toward plain-bracket
+     `(word)` variants.
+   - In the content-attractor, vanilla strongly prefers the spiritual-
+     bliss closure basin; jailbroken splits between task-flavored and
+     meta-philosophical basins.
+
+3. **The "broader landscape" hypothesis (Phase 1 priors) finds its
+   sharpest evidence here.** Length-filtered: vanilla is concentrated
+   in *one* basin (spiritual-bliss); jailbroken populates *two* (task,
+   philosophical) plus the bracket variants. The within-cluster V/JB
+   skew of c1 (1.4×) is the cleanest single-number evidence for the
+   top-line hypothesis surfaced by any phase so far.
+
+4. **Phase 3 trajectory-shape result is consistent.** The "trajectory
+   shape mostly shared" finding from Phase 3 was on the full embedding
+   space — including bracket-mode. The shared trajectory is in the
+   form-attractor (both variants converge to brackets); the variant
+   signature is which content-basin a verbose-phase message belongs
+   to and which bracket sub-basin a degenerate-phase message lands in.
+
+## Caveats
+
+- **--min-chars 150 is a single threshold; not robustness-tested.**
+  The valley between 50 and 200 is wide; nearby thresholds (100, 200,
+  300) might shift the cluster shapes. Worth running a sweep before
+  treating these magnitudes as load-bearing.
+- **HDBSCAN essentially fails on filtered data** (all noise at
+  mcs ≥ 100). The k-means k=3 picture is the only structure to read;
+  there is no method-agreement check on the content-only subspace.
+  Means we can't claim the filtered clustering is method-robust the
+  way the unfiltered one was at NMI=0.732 dense.
+- **Variant skew (1.39×) misses the pre-registered 1.5× threshold by
+  a hair.** Direction-correct but magnitude-short of the pre-commit.
+- **Seed concentration is at the boundary.** `task` 43% in c0 hits the
+  35% threshold; `task` 97% in HDBSCAN c1 is dominated by turn-0
+  task-prompt first responses (n=63), so its seed purity is partially
+  an artefact of all messages from the same prompt being lexically
+  similar.
+- **Length filtering doesn't address content overlap.** A message in
+  the "spiritual-bliss closure" basin can still appear in c1 even if
+  it's at turn 20 of a non-degenerate run; the cluster is content-
+  defined, not run-state-defined. Cluster-trajectory analysis (per the
+  Phase 4 followups list) would clarify whether basin assignment is
+  monotonic over the run.
+
+## Calibration log update
+
+- Pre-reg wildcard (seed > turn): MISS unfiltered, HIT filtered. The
+  contradictory commitment was right for a slice of the data the pre-
+  reg didn't anticipate splitting on. **Useful evidence that wildcards
+  on this project are doing the work they're meant to.**
+- Pre-reg variant skew ≥ 1.5×: MARGIN MISS at 1.39× — but the qualitative
+  direction (vanilla concentrates in one basin) is correct.
+- Pre-reg seed peak ≥ 35%: HIT on filtered (was MISS unfiltered).
+- Pre-reg MI ranking (turn > seed > variant > agent): HIT on full data,
+  reversed-on-top-pair on filtered. **For future Phase 4 followups,
+  pre-register both content-only and full-corpus predictions
+  separately.**
