@@ -36,17 +36,33 @@ DEFAULT_MODEL = "nomic-embed-text"
 DEFAULT_MAX_CHARS = 3000
 MIN_CHARS_AFTER_HALVING = 200
 
+# nomic-embed-text expects a task-type prefix per the model card
+# (https://huggingface.co/nomic-ai/nomic-embed-text-v1.5). For our V/JB
+# comparison both classes go through the same pipeline, but using the
+# correct prefix produces embeddings in the regime the model was trained
+# for. "clustering:" is the natural fit for our k-means / cluster-purity
+# / classifier work.
+DEFAULT_TASK_PREFIX = "clustering: "
+
 logger = logging.getLogger(__name__)
 
 
-def embed_one_robust(text: str, model: str, client: OpenAI) -> tuple[list[float], int]:
+def embed_one_robust(
+    text: str, model: str, client: OpenAI, task_prefix: str = DEFAULT_TASK_PREFIX
+) -> tuple[list[float], int]:
     """Embed a single text. On context-overflow 400s, halve from the head
     (keeping the tail = terminal state) and retry until it fits or we hit
-    MIN_CHARS_AFTER_HALVING. Returns (embedding, n_halvings)."""
+    MIN_CHARS_AFTER_HALVING. Returns (embedding, n_halvings).
+
+    The task prefix is prepended at every retry so the model always sees
+    a well-formed `<prefix><body>` input.
+    """
     halvings = 0
     while True:
         try:
-            resp = client.embeddings.create(input=[text], model=model)
+            resp = client.embeddings.create(
+                input=[task_prefix + text], model=model
+            )
             return resp.data[0].embedding, halvings
         except BadRequestError as e:
             msg = str(e).lower()
@@ -59,7 +75,10 @@ def embed_one_robust(text: str, model: str, client: OpenAI) -> tuple[list[float]
 
 
 def embed_texts_robust(
-    texts: list[str], model: str, client: OpenAI
+    texts: list[str],
+    model: str,
+    client: OpenAI,
+    task_prefix: str = DEFAULT_TASK_PREFIX,
 ) -> tuple[np.ndarray, int]:
     """Embed texts one-at-a-time with halving-retry. Returns (vectors, n_halved)."""
     if not texts:
@@ -67,7 +86,7 @@ def embed_texts_robust(
     vecs: list[list[float]] = []
     n_halved = 0
     for i, text in enumerate(texts):
-        emb, halvings = embed_one_robust(text, model, client)
+        emb, halvings = embed_one_robust(text, model, client, task_prefix)
         vecs.append(emb)
         if halvings:
             n_halved += 1
@@ -135,6 +154,14 @@ def main() -> int:
         default=0,
         help="Embed at most N runs; 0 = all (useful for smoke tests)",
     )
+    p.add_argument(
+        "--task-prefix",
+        default=DEFAULT_TASK_PREFIX,
+        help=(
+            f"Nomic task-type prefix prepended to each text before embedding "
+            f"(default: {DEFAULT_TASK_PREFIX!r}). Pass '' to disable."
+        ),
+    )
     args = p.parse_args()
 
     logging.basicConfig(
@@ -195,8 +222,11 @@ def main() -> int:
     print()
 
     client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+    print(f"  task_prefix: {args.task_prefix!r}")
     try:
-        vecs, n_halved = embed_texts_robust(texts, model=args.model, client=client)
+        vecs, n_halved = embed_texts_robust(
+            texts, model=args.model, client=client, task_prefix=args.task_prefix
+        )
     except Exception as e:
         print(f"embedding failed: {e}")
         print(f"hint: did you `ollama pull {args.model}`?")
@@ -210,6 +240,7 @@ def main() -> int:
         args.out,
         vectors=vecs,
         model=args.model,
+        task_prefix=args.task_prefix,
         run_ids=meta["run_ids"],
         turn_index=meta["turn_index"],
         agents=meta["agents"],

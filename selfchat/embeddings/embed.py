@@ -34,6 +34,11 @@ DEFAULT_MODEL = "nomic-embed-text"
 DEFAULT_LAST_K = 5
 DEFAULT_MAX_CHARS = 4000  # ~1000 tokens, well under nomic-embed-text's 2048 context
 
+# nomic-embed-text expects a task-type prefix per the model card
+# (https://huggingface.co/nomic-ai/nomic-embed-text-v1.5). "clustering:"
+# matches our cohesion / cluster / classifier downstream usage.
+DEFAULT_TASK_PREFIX = "clustering: "
+
 # Shared with browse.py's TF-IDF tooltip tokenizer so the embedding pipeline
 # and the displayed top-tokens agree on what counts as a "word."
 WORD_RE = re.compile(r"[A-Za-z][A-Za-z']+")
@@ -99,7 +104,12 @@ def terminal_state(t: Transcript, last_k: int, max_chars: int = DEFAULT_MAX_CHAR
     return text
 
 
-def embed_texts(texts: list[str], model: str, client: OpenAI) -> np.ndarray:
+def embed_texts(
+    texts: list[str],
+    model: str,
+    client: OpenAI,
+    task_prefix: str = DEFAULT_TASK_PREFIX,
+) -> np.ndarray:
     """Embed texts one at a time. Returns (N, D) float32 array.
 
     One-at-a-time avoids batch-size context limits in some Ollama embedding
@@ -110,7 +120,7 @@ def embed_texts(texts: list[str], model: str, client: OpenAI) -> np.ndarray:
         return np.zeros((0, 0), dtype=np.float32)
     vecs: list[list[float]] = []
     for i, text in enumerate(texts):
-        resp = client.embeddings.create(input=[text], model=model)
+        resp = client.embeddings.create(input=[task_prefix + text], model=model)
         vecs.append(resp.data[0].embedding)
         if (i + 1) % 25 == 0 or i + 1 == len(texts):
             logger.info("embedded %d/%d", i + 1, len(texts))
@@ -171,6 +181,14 @@ def main() -> int:
         help=f"Last K turns as terminal state (default: {DEFAULT_LAST_K})",
     )
     p.add_argument("--out", type=Path, help="Optional .npz path to save vectors + metadata")
+    p.add_argument(
+        "--task-prefix",
+        default=DEFAULT_TASK_PREFIX,
+        help=(
+            f"Nomic task-type prefix prepended to each text before embedding "
+            f"(default: {DEFAULT_TASK_PREFIX!r}). Pass '' to disable."
+        ),
+    )
     args = p.parse_args()
 
     logging.basicConfig(
@@ -212,9 +230,12 @@ def main() -> int:
 
     client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
     texts = [terminal_state(t, args.last_k) for t in transcripts]
+    print(f"  task_prefix: {args.task_prefix!r}")
 
     try:
-        vecs = embed_texts(texts, model=args.model, client=client)
+        vecs = embed_texts(
+            texts, model=args.model, client=client, task_prefix=args.task_prefix
+        )
     except Exception as e:
         print(f"embedding failed: {e}")
         print(f"hint: did you `ollama pull {args.model}`?")
@@ -261,6 +282,7 @@ def main() -> int:
             stop_reasons=stop_reasons,
             last_k=args.last_k,
             model=args.model,
+            task_prefix=args.task_prefix,
         )
         print(f"\nsaved: {args.out}")
 

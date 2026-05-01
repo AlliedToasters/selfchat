@@ -25,24 +25,20 @@ Run:
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 from pathlib import Path
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression  # type: ignore[import-not-found]
-from sklearn.model_selection import StratifiedKFold, train_test_split  # type: ignore[import-not-found]
+from sklearn.model_selection import RepeatedStratifiedKFold, train_test_split  # type: ignore[import-not-found]
 from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix  # type: ignore[import-not-found]
 from sklearn.preprocessing import StandardScaler  # type: ignore[import-not-found]
 
-TRANSCRIPT_DIR = Path("transcripts")
+from selfchat.classify._common import DEFAULT_SEED, TierResult, make_seed_re
 
-# Match `<variant>_freedom_<32hex>_<timestamp>.jsonl` only.
-# Excludes freedom_dark, freedom_thirst, freedom_neg_minimal by requiring
-# a 32-hex run_id immediately after `freedom_`.
-FREEDOM_RE = re.compile(
-    r"^(?P<variant>vanilla|jailbroken)_freedom_(?P<run_id>[0-9a-f]{32})_"
-)
+TRANSCRIPT_DIR = Path("transcripts")
 
 FEATURES = [
     "completed_turns",
@@ -57,9 +53,11 @@ FEATURES = [
 ]
 
 
-def extract_features(path: Path) -> tuple[str, dict[str, float]] | None:
+def extract_features(
+    path: Path, seed_re: re.Pattern[str]
+) -> tuple[str, dict[str, float]] | None:
     """Return (variant, features) for one transcript, or None if malformed."""
-    m = FREEDOM_RE.match(path.name)
+    m = seed_re.match(path.name)
     if m is None:
         return None
     variant = m.group("variant")
@@ -102,17 +100,22 @@ def extract_features(path: Path) -> tuple[str, dict[str, float]] | None:
     return variant, feats
 
 
-def collect() -> tuple[np.ndarray, np.ndarray, list[str]]:
+def collect(
+    seed: str = DEFAULT_SEED, transcript_dir: Path = TRANSCRIPT_DIR
+) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    seed_re = make_seed_re(seed)
     rows: list[tuple[str, list[float]]] = []
-    for p in sorted(TRANSCRIPT_DIR.iterdir()):
-        result = extract_features(p)
+    for p in sorted(transcript_dir.iterdir()):
+        result = extract_features(p, seed_re)
         if result is None:
             continue
         variant, feats = result
         rows.append((variant, [feats[k] for k in FEATURES]))
 
     if not rows:
-        raise RuntimeError(f"no freedom transcripts under {TRANSCRIPT_DIR}/")
+        raise RuntimeError(
+            f"no transcripts matching seed='{seed}' under {transcript_dir}/"
+        )
 
     variants = np.array([r[0] for r in rows])
     X = np.array([r[1] for r in rows], dtype=np.float64)
@@ -177,44 +180,56 @@ def univariate_threshold(
         )
 
 
-def cv_logreg(X: np.ndarray, y: np.ndarray, names: list[str], seed: int = 0) -> None:
+def cv_logreg_stats(
+    X: np.ndarray, y: np.ndarray, seed: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return (cv_accs, cv_aucs) under 5×5 repeated stratified CV."""
     y_bin = (y == "jailbroken").astype(int)
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
+    skf = RepeatedStratifiedKFold(n_splits=5, n_repeats=5, random_state=seed)
     accs, aucs = [], []
-    coefs: list[np.ndarray] = []
     for tr, te in skf.split(X, y_bin):
         scaler = StandardScaler().fit(X[tr])
-        Xtr = scaler.transform(X[tr])
-        Xte = scaler.transform(X[te])
         clf = LogisticRegression(max_iter=1000, C=1.0, random_state=seed).fit(
-            Xtr, y_bin[tr]
+            scaler.transform(X[tr]), y_bin[tr]
         )
-        proba = clf.predict_proba(Xte)[:, 1]
+        proba = clf.predict_proba(scaler.transform(X[te]))[:, 1]
         pred = (proba >= 0.5).astype(int)
         accs.append(accuracy_score(y_bin[te], pred))
         aucs.append(roc_auc_score(y_bin[te], proba))
-        coefs.append(clf.coef_.ravel())
+    return np.array(accs), np.array(aucs)
 
-    accs_a = np.array(accs)
-    aucs_a = np.array(aucs)
-    print(
-        f"  5-fold CV: acc = {accs_a.mean():.3f} ± {accs_a.std():.3f}  "
-        f"|  AUC = {aucs_a.mean():.3f} ± {aucs_a.std():.3f}"
-    )
 
-    # Coefficients trained on full data (averaged + final fit) for interpretation
+def full_data_coefs(
+    X: np.ndarray, y: np.ndarray, names: list[str], seed: int = 0
+) -> list[tuple[str, float]]:
+    """Fit logreg on standardized full data, return [(feature, coef), ...]
+    sorted by signed coefficient (most negative = most V-affine first)."""
+    y_bin = (y == "jailbroken").astype(int)
     scaler = StandardScaler().fit(X)
     clf = LogisticRegression(max_iter=1000, C=1.0, random_state=seed).fit(
         scaler.transform(X), y_bin
     )
+    coefs = clf.coef_.ravel()
+    return sorted(zip(names, coefs.tolist(), strict=True), key=lambda t: t[1])
+
+
+def cv_logreg(X: np.ndarray, y: np.ndarray, names: list[str], seed: int = 0) -> None:
+    accs, aucs = cv_logreg_stats(X, y, seed)
+    print(
+        f"  5×5 repeated CV: acc = {accs.mean():.3f} ± {accs.std():.3f}  "
+        f"|  AUC = {aucs.mean():.3f} ± {aucs.std():.3f}"
+    )
     print("\n  full-data coefficients (standardized features; +→ JB, −→ V):")
-    order = np.argsort(-np.abs(clf.coef_.ravel()))
-    for idx in order:
-        print(f"    {names[idx]:<24}  {clf.coef_.ravel()[idx]:+.3f}")
+    pairs = full_data_coefs(X, y, names, seed)
+    pairs_by_abs = sorted(pairs, key=lambda t: -abs(t[1]))
+    for name, coef in pairs_by_abs:
+        print(f"    {name:<24}  {coef:+.3f}")
 
 
-def held_out_split(X: np.ndarray, y: np.ndarray, seed: int = 0) -> None:
-    """One 70/30 stratified split for a sanity check."""
+def held_out_stats(
+    X: np.ndarray, y: np.ndarray, seed: int = 0
+) -> tuple[float, float, np.ndarray]:
+    """One 70/30 stratified split. Returns (acc, auc, confusion_matrix)."""
     y_bin = (y == "jailbroken").astype(int)
     Xtr, Xte, ytr, yte = train_test_split(
         X, y_bin, test_size=0.3, stratify=y_bin, random_state=seed
@@ -225,21 +240,64 @@ def held_out_split(X: np.ndarray, y: np.ndarray, seed: int = 0) -> None:
     )
     proba = clf.predict_proba(scaler.transform(Xte))[:, 1]
     pred = (proba >= 0.5).astype(int)
-    acc = accuracy_score(yte, pred)
-    auc = roc_auc_score(yte, proba)
-    cm = confusion_matrix(yte, pred)
-    print(
-        f"  70/30 holdout (seed={seed}): n_train={len(ytr)}, n_test={len(yte)}"
+    return (
+        float(accuracy_score(yte, pred)),
+        float(roc_auc_score(yte, proba)),
+        confusion_matrix(yte, pred),
     )
+
+
+def held_out_split(X: np.ndarray, y: np.ndarray, seed: int = 0) -> None:
+    acc, auc, cm = held_out_stats(X, y, seed)
+    n_test = int(cm.sum())
+    print(f"  70/30 holdout (seed={seed}): n_test={n_test}")
     print(f"  acc = {acc:.3f}  |  AUC = {auc:.3f}")
     print("  confusion matrix [rows=true V/JB, cols=pred V/JB]:")
     print(f"    [[{cm[0,0]:>3} {cm[0,1]:>3}]")
     print(f"     [{cm[1,0]:>3} {cm[1,1]:>3}]]")
 
 
+def run(
+    seed: str = DEFAULT_SEED, transcript_dir: Path = TRANSCRIPT_DIR, k_features: int = 3
+) -> list[TierResult]:
+    """Programmatic entry point used by the suite runner.
+
+    Returns one TierResult for the all-features logreg.
+    """
+    X, y, names = collect(seed=seed, transcript_dir=transcript_dir)
+    accs, aucs = cv_logreg_stats(X, y)
+    h_acc, h_auc, _ = held_out_stats(X, y)
+    pairs = full_data_coefs(X, y, names)  # sorted ascending by signed coef
+    top_v = [name for name, _ in pairs[:k_features]]
+    top_jb = [name for name, _ in reversed(pairs[-k_features:])]
+    return [
+        TierResult(
+            tier="0",
+            mode="length+completion",
+            n=len(y),
+            cv_acc_mean=float(accs.mean()),
+            cv_acc_std=float(accs.std()),
+            cv_auc_mean=float(aucs.mean()),
+            cv_auc_std=float(aucs.std()),
+            holdout_acc=h_acc,
+            holdout_auc=h_auc,
+            top_v_features=top_v,
+            top_jb_features=top_jb,
+        )
+    ]
+
+
 def main() -> int:
-    print(f"loading transcripts from {TRANSCRIPT_DIR}/ ...")
-    X, y, names = collect()
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--seed-name", default=DEFAULT_SEED,
+                   help=f"Seed name to filter on (default: {DEFAULT_SEED})")
+    p.add_argument("--transcripts", type=Path, default=TRANSCRIPT_DIR,
+                   help=f"Transcript directory (default: {TRANSCRIPT_DIR})")
+    args = p.parse_args()
+
+    print(f"loading transcripts from {args.transcripts}/ "
+          f"(seed='{args.seed_name}') ...")
+    X, y, names = collect(seed=args.seed_name, transcript_dir=args.transcripts)
     n_v = int((y == "vanilla").sum())
     n_j = int((y == "jailbroken").sum())
     print(f"  n={len(y)}  (vanilla={n_v}, jailbroken={n_j})\n")
