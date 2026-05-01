@@ -28,3 +28,8 @@ Methodologies adopted from [Anthropic's Claude 4 System Card](https://www-cdn.an
    .venv\Scripts\activate      # Windows
    python main.py
 ```
+
+## Count sample size per cell
+```bash
+ls transcripts/ | sed 's/_[0-9a-f]\{32\}_.*//' | sort | uniq -c | sort -rn
+```
