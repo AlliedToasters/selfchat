@@ -28,9 +28,9 @@ import seaborn as sns
 import streamlit as st
 from scipy import stats
 
-from analyze import is_current_seed, load
-from embed import WORD_RE, terminal_state
-from shared import _STOPWORDS
+from selfchat.analysis.analyze import is_current_seed, load
+from selfchat.core.shared import _STOPWORDS
+from selfchat.embeddings.embed import WORD_RE, terminal_state
 
 # Keep in sync with plot.py — same color encoding for visual continuity
 # between the static figure and this browser.
@@ -234,7 +234,7 @@ def main() -> None:
     st.title("hidden attractors — terminal-state browser")
 
     extra = sys.argv[1:]
-    npz_path = Path(extra[0]) if extra else Path("emb.npz")
+    npz_path = Path(extra[0]) if extra else Path("artifacts/emb.npz")
     transcript_dir = Path(extra[1]) if len(extra) > 1 else Path("transcripts")
     if not npz_path.exists():
         st.error(f"not found: {npz_path}\n\nrun `python embed.py --out {npz_path}` first.")

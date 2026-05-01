@@ -252,7 +252,7 @@ def load_texts_aligned(
     Imported lazily because it requires the analyze module + transcript I/O,
     not needed for the metrics-only pass.
     """
-    from analyze import load
+    from selfchat.analysis.analyze import load
 
     by_run: dict[str, dict[int, str]] = {}
     paths = sorted(transcript_dir.glob("*.jsonl"))
@@ -373,7 +373,7 @@ def _write_row(
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("npz", type=Path, nargs="?", default=Path("emb_msgs.npz"))
+    p.add_argument("npz", type=Path, nargs="?", default=Path("artifacts/emb_msgs.npz"))
     p.add_argument(
         "--include-degenerate",
         action="store_true",

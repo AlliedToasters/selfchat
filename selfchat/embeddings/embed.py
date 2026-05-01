@@ -27,8 +27,8 @@ from pathlib import Path
 import numpy as np
 from openai import OpenAI
 
-from analyze import NATURAL_STOPS, Transcript, Turn, is_current_seed, load
-from self_chat import OLLAMA_BASE_URL
+from selfchat.analysis.analyze import NATURAL_STOPS, Transcript, Turn, is_current_seed, load
+from selfchat.core.self_chat import OLLAMA_BASE_URL
 
 DEFAULT_MODEL = "nomic-embed-text"
 DEFAULT_LAST_K = 5

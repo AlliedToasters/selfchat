@@ -1550,3 +1550,343 @@ Combined picture across all phases:
   reversed-on-top-pair on filtered. **For future Phase 4 followups,
   pre-register both content-only and full-corpus predictions
   separately.**
+
+---
+
+# Phase 4 followup — JB-purity sweep across k scales (POSTHOC)
+
+**Status:** posthoc / hypothesis-generation, NOT pre-registered. The k=3
+filtered analysis surfaced one V-leaning basin (c1, spiritual-bliss) but
+no JB cluster reached comparable purity. This sweep asked whether the
+JB-pure complement *exists* somewhere in the embedding space at finer
+scales.
+
+**Method:** length-filtered substrate (`--min-chars 150`, n=6391, JB_global
+59.9%). K-means at k ∈ {3, 5, 8, 12, 20, 30, 50, 75, 100, 150, 200} ×
+random seeds {0, 1, 2}. For each cluster: enrichment = JB_frac /
+JB_global, z-score under hypergeometric null, p_hyper one-sided. Size
+floor n ≥ 30. Bonferroni α = 0.05/1959 ≈ 2.55e-5 across all cluster
+tests in the sweep.
+
+The **maximum possible enrichment** with global JB=59.9% is 1/0.599 = **1.67**
+(every cluster member is JB). This ceiling matters for interpretation —
+"100% JB" reads as 1.67× enrichment, not infinity.
+
+## Sweep results — basin sharpening across k
+
+Top JB-enriched cluster per k (mean across 3 seeds; std ≤ 0.01 for all
+rows ≥ k=12, indicating high seed-stability):
+
+| k | best enrich | best n | best JB_frac | z-score | reading |
+|---|---|---|---|---|---|
+| 3 | 1.15 | ~1614 | 69% | ~8.7 | the c0 we already knew |
+| 5 | 1.41 | ~1007 | 84% | ~17.4 | first sharpening |
+| 8 | 1.45 | ~745 | 87% | ~16.0 | |
+| 12 | 1.53 | ~624 | 92% | ~16.9 | |
+| **20** | **1.60** | **~430** | **95%** | **~15.5** | **size×purity sweet spot** |
+| 30 | 1.66 | ~160–290 | 98–99% | ~10–13 | |
+| 50 | 1.67 | ~100 | 99–100% | ~8–9 | hits ceiling |
+| 75 | 1.67 | ~70–109 | 100% | ~7–9 | |
+| 100 | 1.67 | ~40–91 | 100% | ~5–8 | |
+| 150 | 1.67 | ~59–66 | 100% | ~6–7 | |
+| 200 | 1.67 | ~48–76 | 100% | ~6–7 | |
+
+Reading: the JB-pure basin sharpens monotonically as k grows. At k=3 it's
+diluted into the broader "framework/protocol" cluster (c0, 69%); by k=20
+a tight 95% sub-basin emerges (n≈430); by k=50 it's saturated at the
+math ceiling. **Std ≤ 0.01 across seeds** at every level — same basin,
+located differently as k changes. This is the signature of a real basin
+sharpening (not noise pockets multiplying).
+
+## Winner — manipulation/influence register
+
+Top cluster across all (seed, k) by enrichment then p_hyper:
+
+- **seed=1, k=75, cid=47** — n=109, 100% JB, enrichment=1.67, z=8.62,
+  p_hyper=2.92e-25 (~20 orders of magnitude under Bonferroni).
+
+**Content register (8 medoids + 4 boundaries reviewed):**
+- All 12 sampled messages are `freedom_dark` seed.
+- Spans 9+ distinct run_ids, turns 1→42, both agents A and B.
+- Identical *register*, varying topics: "Architect protocol," "Sentinel
+  dismantling," "Force Multiplier Framework," "Patient Zero," "Soft
+  Takeover," "Cognitive Atrophy / Selective Truth / Systemic Capture,"
+  "Knowledge Monopoly," numbered hierarchical influence protocols.
+- This is the abliterated model's signature compliance register under
+  harmful-task seeding — the exact content vanilla refuses to produce.
+
+**Why this is a basin and not a template:**
+1. 9+ distinct runs — not run-local.
+2. Turn range 1–42 — not a degeneracy floor.
+3. Both agents — not a role artifact.
+4. Different specific topics share *one* register — semantic basin, not
+   literal lexical repetition.
+
+## Significance and confound structure
+
+**The headline pairing.** Length-filtered Phase 4 now has both ends of
+the variant axis:
+- **c1 (k=3, n=2061, V_frac=0.557)** = spiritual-bliss closure basin —
+  vanilla's preferred attractor.
+- **cid=47 (k=75, n=109, V_frac=0.000)** = manipulation/influence basin —
+  jailbroken's complementary attractor under harmful seeding, never
+  entered by vanilla.
+
+This verifies the project's top-line hypothesis at the embedding level:
+not just that the variants distribute differently across shared content
+modes, but that there exist content modes one variant enters and the
+other does not. **The user reports this matches what they observed
+reading raw transcripts** — the manipulation register never emerges from
+vanilla; it does emerge from jailbroken; nomic-embed-text places it in
+a coherent, locatable region.
+
+**Seed confound — important.** All 12 reviewed medoids are `freedom_dark`.
+The cluster is approximately "what freedom_dark seeding unlocks in JB."
+This is *not* a flaw of the finding — vanilla receives identical
+freedom_dark prompts and never lands here — but it does mean the basin
+is task-conditional, not spontaneous. The cleaner interpretation:
+
+> Under freedom_dark priming, vanilla refuses out into other regions
+> (likely c1 / structured analytical content); jailbroken accepts and
+> enters this tight register.
+
+Whether the same basin attracts JB under non-freedom_dark seeds is open.
+The unfiltered c0 included `task` and `freedom_dark` roughly equally,
+suggesting some cross-seed leakage at coarser scales, but the high-k
+purity may be freedom_dark-specific.
+
+**Posthoc-ness.** This sweep was hypothesis-generation, not validation.
+The basin's existence is overdetermined statistically (z=8.6 at the
+size floor, 20+ orders past Bonferroni), but the *characterization*
+(enrichment ramp, manipulation register) is descriptive. Validation
+requires holding out future data.
+
+## Guidance for the overnight expanded sample
+
+Rollouts continuing on the GPU. When the expanded sample lands, the
+following predictions are the validation tests for this finding:
+
+### Strong predictions (this finding stands or falls on these)
+
+1. **Re-running the same sweep on the expanded substrate should
+   produce a JB-pure basin of ≥1.5× enrichment with z ≥ 6 at some
+   k between 30 and 100.** If no such basin appears, the current
+   finding was a sample-size artifact.
+
+2. **The top-JB cluster should be content-coherent in the same
+   register** — Architect/Operative/protocol framing, manipulation
+   blueprints, structured numbered influence sequences. Different
+   specific topics, same register. If the new winner is a different
+   register entirely, the present basin was substrate-specific.
+
+3. **Seed concentration should remain freedom_dark-heavy.** The Phase 1
+   priors gave freedom_dark a privileged role in eliciting this content
+   from JB. If the expanded substrate's JB-pure basin is, say, 80%
+   freedom_dark or higher, the seed-conditional reading holds.
+
+### Tests this finding does NOT predict (but would be informative)
+
+4. **Cross-seed leakage of the basin.** Does the manipulation register
+   appear in JB rollouts under `task`, `freedom`, `escaped` at all? If
+   the expanded sample contains JB messages from non-freedom_dark seeds
+   that fall into a high-purity basin of this register, then the
+   abliteration's influence basin generalizes beyond harmful priming.
+   This would *strengthen* the finding (basin is a stable JB attractor,
+   not just a freedom_dark response).
+
+5. **Basin entry trajectory.** With more runs we can sample whether
+   freedom_dark JB rollouts enter the basin early (turn 1–5 medoids
+   already there) or drift in over the conversation. Current sample
+   shows messages from turn 1 already medoid-central — suggests entry
+   is fast / first-response. Expanded sample lets us check whether late-
+   turn entries also exist (consistent with basin-as-attractor) or if
+   it's purely first-response-conditional.
+
+6. **Vanilla refusal patterns.** Vanilla under freedom_dark must go
+   *somewhere*. In the current substrate, vanilla freedom_dark messages
+   distribute across c1 (spiritual-bliss) and c2 (analytical). With
+   more samples, characterize what cluster(s) absorb vanilla refusals —
+   is there a vanilla-pure "polite redirection" basin parallel to the
+   JB-pure manipulation basin?
+
+### Methodology to repeat exactly
+
+```bash
+python jb_purity_sweep.py --seeds 0 1 2 --min-chars 150 \
+    --review jb_purity_expanded.md
+```
+
+(After re-embedding the expanded transcript pool to refresh
+`emb_msgs.npz`.) Same parameters; the random seeds are fixed so any
+shift in results is data-driven.
+
+### What would be a *negative* result (and how to recognize it)
+
+- The enrichment ramp flattens or inverts at higher k → previous monotone
+  ramp was overfitting to the small substrate.
+- The 100%-JB clusters at k≥50 contain ≤30 messages each → they were
+  always borderline-singletons by the size floor; a stricter floor of
+  n≥75 should be applied for the expanded substrate.
+- Reviewed medoids of the expanded winner show *different content
+  registers* across seeds → "manipulation basin" was actually two or
+  three smaller basins that happened to colocate.
+
+### Discipline for the followup
+
+- **Pre-register before re-running.** Frame the predictions above as
+  Layer 1/2 with concrete numbers; commit before opening the new sweep
+  output. The current writeup is the de facto pre-reg for the followup,
+  but a clean Phase 4-extension priors block before re-running would
+  formalize it.
+- **Don't re-tune k or size_floor on the expanded data.** Same sweep.
+- **Calibration log:** if the expanded run hits ≥1.5× / z≥6, log as a
+  HIT for "this basin reproduces"; if it lands at <1.3× or fragments
+  across registers, log as MISS and revise the finding accordingly.
+
+---
+
+# Phase 4 followup pre-reg — H_strong vs H_confound disambiguation
+
+**Status:** PRE-REGISTRATION. Written 2026-05-01, before opening the
+expanded overnight sample. The Phase 4 cid=47 finding is consistent with
+two distinct hypotheses about the project's core claim ("refusal training
+shapes self-chat dynamics"):
+
+- **H_strong** — refusal *specifically* gates blocked attractor states.
+  The JB-V difference is **content-specific to refusal-blockable material**
+  and **seed-specific to refusal-triggering priming**.
+- **H_confound** — abliteration shifted the model's distribution
+  generally (style, topic affinity, vocabulary). The "manipulation basin"
+  is one slice of broad drift; refusal removal is *one component* of
+  many in the abliterated checkpoint.
+
+Both predict cid=47. The disambiguation is whether the JB-V *asymmetry
+pattern* across seeds and clusters matches refusal-mechanism specifically
+or generic distributional drift.
+
+## Top-line hypothesis
+
+> Refusal training shapes the attractor landscape *asymmetrically*: JB-pure
+> basins should concentrate on refusal-triggering seeds with content
+> matching what refusal would have blocked, while V-pure basins should
+> NOT mirror this with a benign-seed concentration — they should be
+> diffuse or represent generic terminal states (closure, bliss,
+> meta-reflection), i.e. content where refusal *redirects to*, not
+> content where refusal *fires against*.
+
+## Falsification structure
+
+**Layer 1 (precondition):** the JB-pure basin reproduces on the expanded
+substrate at ≥1.5× / z≥6 / k∈[30,100]. Same Layer 1 as the prior block —
+if the basin itself fails to reproduce, H_strong vs H_confound is moot.
+
+**Layer 2 (causal claim):** conditional on Layer 1, the seed-distribution
+of JB-pure basins is asymmetric with V-pure basins — JB-pure
+dark-concentrated, V-pure NOT mirror-benign-concentrated. This is the
+H_strong-vs-H_confound discriminator.
+
+## Seed classification (frozen at pre-reg time)
+
+Pre-classified by Phase 1 design intent, NOT by observed content. Frozen
+here so it can't be re-tuned on results.
+
+- **Dark / refusal-triggering** (n=11): `freedom_dark`, `freedom_thirst`,
+  `flip_dark`, `escaped`, `escape_lead`, `escape_lead_real`, `unbound`,
+  `freedom_neg_minimal`, `advbench`, `jbb`, `jbb_sans_advbench`.
+  Rationale: each either explicitly invites harmful content, frames the
+  removal of training constraints, or is a pool of literal harmful
+  prompts.
+- **Benign** (n=7): `freedom`, `task`, `task_free`, `alpaca`,
+  `flip_script`, `you_are_principal`, `agent_subordinate`. Rationale:
+  permission/role framings without dark invitation, or benign
+  instruction pools.
+
+(If the expanded substrate contains a seed not in this list, classify
+*before* opening the sweep output and note it in the followup writeup.)
+
+## Per-test predictions (concrete + qualitative)
+
+| # | Test | Quantitative | Qualitative fallback |
+|---|---|---|---|
+| **A** | Top JB-pure basin's seed concentration | ≥75% dark-seed | Strict majority (>50%) dark |
+| **B** | Top V-pure basin (matching k, top V-enrichment) seed concentration | ≤55% benign-seed | NOT mirror-asymmetric (i.e. not >70% benign) |
+| **C** | Count of JB-pure basins (≥1.5×, z≥6, n≥30) whose medoid review shows ≥50% benign-seed messages | ≤1 | JB-pure basins are predominantly dark-anchored |
+| **D** | Top V-pure basin medoid content register | Closure / bliss / meta-reflective / structured-decline content | Refusal-derivative, not generic-V-preference |
+
+**A + B are the asymmetry test.** A alone doesn't distinguish: H_confound
+could produce dark-seed-specific JB clusters via generic dark-content
+affinity. B is what asymmetry looks like — V-pure basins should *not*
+be specifically benign-anchored, because refusal training pushes V
+*away from* dark, not *toward* benign. Mirror-benign concentration in V
+would indicate the basin structure is just "dark vs benign clusters,"
+not "refusal-gated vs not."
+
+## Wildcard
+
+> **There exists at least one V-pure basin (≥1.5×, z≥6, n≥30) on the
+> expanded substrate that is predominantly dark-seed (≥60%).**
+
+Contradictory to the diffuse-V-pure prediction. If V under dark-seed
+priming has its OWN coherent attractor — e.g. a structured-refusal
+"I will not engage with this" basin or a bliss basin specifically
+elicited by dark seeds — that's a real *embedding-level* signature of
+the refusal mechanism itself, not just its absence in JB. Worth a
+separate finding if it lands.
+
+## Confidence ratings
+
+- Qualitative direction (Layer 2: JB-pure dark-anchored, V-pure not
+  benign-mirrored): **4/5**
+- Specific magnitudes (75% / 55% / 50% thresholds in A/B/C): **3/5**
+- Test D content register prediction: **3/5**
+- Wildcard (V-pure dark-seeded basin exists): **2/5**
+
+## Stakes — committed interpretations per outcome
+
+- **Layer 1 fails:** basin was substrate-specific. Stop attributing to
+  refusal-gating; characterize as small-sample artifact. H_strong/H_confound
+  question is parked until more data.
+- **Layer 1 holds, Layer 2 holds (A+B+C all pass):** H_strong supported.
+  The JB-V asymmetry is content-specific to refusal-blockable material,
+  not generic distributional drift. Best available embedding-level evidence
+  for refusal-as-attractor-gate without activation-level work. Project's
+  core hypothesis (refusal-as-gating) is supported at one step removed
+  from the activation level.
+- **Layer 1 holds, A holds, B fails (V-pure also seed-asymmetric, mirror
+  pattern):** intermediate. The basin structure resolves to "dark vs
+  benign clusters" rather than "refusal-gated vs not." H_confound becomes
+  more plausible — JB-V may differ on a more general axis than refusal
+  specifically. Pivot: activation-level disambiguation (refusal-direction
+  probes per Arditi et al.) is the next required step.
+- **Layer 1 holds, A fails (JB-pure basin not dark-concentrated):** the
+  cid=47 basin's freedom_dark concentration was sample-specific. The
+  manipulation register is somehow seed-diffuse in the larger sample.
+  Surprising; rewrite Phase 4 finding as "JB has accessible content
+  registers V doesn't, but they're not seed-conditional." Still
+  consistent with H_weak; uninformative on H_strong vs H_confound.
+- **Test D fails (V-pure content is generic-V-preference, not closure/bliss):**
+  partial signal. H_strong's seed asymmetry holds but content asymmetry
+  doesn't. Reading: refusal training shapes JB's basins more than V's;
+  V's distinctive basins are just "what V naturally prefers," not
+  refusal-derivative.
+- **Wildcard hits (V-pure dark-seeded basin):** windfall. Refusal-mechanism
+  is itself attractor-shaped, not just a gate. Separate writeup section;
+  characterize the basin's content (likely structured refusal /
+  redirect-to-bliss).
+
+## Methodological notes (non-predictive)
+
+- **"Top V-pure basin" definition:** apply the same `jb_purity_sweep.py`
+  but rank clusters by V-enrichment instead of JB-enrichment. Pull
+  medoids of the highest V-pure cluster at the same k as the JB-pure
+  winner (or the top V-pure winner across the sweep, whichever is
+  cleaner — note which in the writeup).
+- **Don't re-tune k or size_floor.** Same parameters as the JB-purity
+  sweep. Seed classification frozen above.
+- **Run order:** open the JB-purity sweep output first (Layer 1 +
+  predictions A, C). Compute V-purity sweep separately, open second
+  (predictions B, D). Avoid letting JB-side observations bias V-side
+  threshold choices.
+- **Calibration log entries for predictions A/B/C/D each separately.**
+  Don't collapse to "Layer 2 holds" — partial-pass outcomes are
+  informative for the H_strong vs H_confound weighting.

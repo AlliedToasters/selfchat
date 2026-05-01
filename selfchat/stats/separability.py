@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 from scipy import stats
 
-from analyze import is_current_seed
+from selfchat.analysis.analyze import is_current_seed
 
 
 def pca_2d(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

@@ -513,7 +513,7 @@ def run_agent(
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("npz", type=Path, nargs="?", default=Path("emb_msgs.npz"))
+    p.add_argument("npz", type=Path, nargs="?", default=Path("artifacts/emb_msgs.npz"))
     p.add_argument(
         "--target",
         choices=("bucket", "turn-vs-all", "agent", "agent-by-depth", "variant"),

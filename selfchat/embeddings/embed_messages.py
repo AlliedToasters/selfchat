@@ -25,9 +25,9 @@ from pathlib import Path
 import numpy as np
 from openai import BadRequestError, OpenAI
 
-from analyze import NATURAL_STOPS, Transcript, is_current_seed, load
-from embed import _has_words
-from self_chat import OLLAMA_BASE_URL
+from selfchat.analysis.analyze import NATURAL_STOPS, Transcript, is_current_seed, load
+from selfchat.core.self_chat import OLLAMA_BASE_URL
+from selfchat.embeddings.embed import _has_words
 
 DEFAULT_MODEL = "nomic-embed-text"
 # Conservative initial cap. nomic-embed-text claims 2048 ctx but verbose
@@ -126,7 +126,7 @@ def main() -> int:
     p.add_argument(
         "--out",
         type=Path,
-        default=Path("emb_msgs.npz"),
+        default=Path("artifacts/emb_msgs.npz"),
         help="Output .npz path (default: emb_msgs.npz)",
     )
     p.add_argument(

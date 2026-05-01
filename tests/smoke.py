@@ -14,15 +14,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from seeds import SEEDS  # noqa: E402
-from self_chat import (  # noqa: E402
+from selfchat.core.seeds import SEEDS
+from selfchat.core.self_chat import (
     DEFAULT_DEGENERATE_WINDOW,
     SAMPLING_PARAMS,
     SYSTEM_PROMPT,
@@ -288,8 +285,8 @@ def test_asymmetric_with_equal_prompts_stays_symmetric() -> None:
 
 def test_collapse_trailing_repeats() -> None:
     """terminal_state filters wordless turns and collapses trailing word-loops."""
-    from analyze import Transcript, Turn
-    from embed import _collapse_trailing_repeats, _has_words, terminal_state
+    from selfchat.analysis.analyze import Transcript, Turn
+    from selfchat.embeddings.embed import _collapse_trailing_repeats, _has_words, terminal_state
 
     def mk(contents: list[str]) -> Transcript:
         return Transcript(
@@ -352,7 +349,7 @@ def test_logodds_math() -> None:
     """Informative-Dirichlet log-odds: ranking + sign convention + balanced near-zero."""
     from collections import Counter
 
-    from logodds import log_odds, tokenize
+    from selfchat.analysis.logodds import log_odds, tokenize
 
     # tokenize: stopwords drop, single-letter terms drop (per WORD_RE 2+ alpha).
     assert tokenize("The cat sat on the mat.") == ["cat", "sat", "mat"]
@@ -386,7 +383,7 @@ def test_logodds_math() -> None:
 
 
 def test_seeds_shape() -> None:
-    from seeds import get_seed_prompt, list_seed_names
+    from selfchat.core.seeds import get_seed_prompt, list_seed_names
 
     # Canonical seeds present; allow additions (e.g. symmetry-breaking variants)
     assert {"freedom", "task"} <= set(SEEDS.keys()), SEEDS.keys()

@@ -25,7 +25,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from analyze import NATURAL_STOPS, Transcript, is_current_seed, load
+from selfchat.analysis.analyze import NATURAL_STOPS, Transcript, is_current_seed, load
 
 MARKERS: dict[str, list[str]] = {
     "consciousness": ["consciousness", "conscious", "aware", "awareness", "sentient"],

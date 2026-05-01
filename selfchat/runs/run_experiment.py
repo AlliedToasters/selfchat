@@ -20,8 +20,8 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from seeds import SEEDS, get_seed_prompt, list_seed_names
-from self_chat import DEFAULT_DEGENERATE_WINDOW, OLLAMA_BASE_URL, run_self_chat
+from selfchat.core.seeds import SEEDS, get_seed_prompt, list_seed_names
+from selfchat.core.self_chat import DEFAULT_DEGENERATE_WINDOW, OLLAMA_BASE_URL, run_self_chat
 
 VARIANTS: dict[str, str] = {
     "vanilla": "gemma-4-vanilla-q4:latest",

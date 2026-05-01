@@ -30,7 +30,7 @@ def pca_2d(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("npz", type=Path, nargs="?", default=Path("emb_msgs.npz"))
+    p.add_argument("npz", type=Path, nargs="?", default=Path("artifacts/emb_msgs.npz"))
     p.add_argument("--out", type=Path, default=Path("figures/pca_messages.png"))
     p.add_argument(
         "--include-degenerate",

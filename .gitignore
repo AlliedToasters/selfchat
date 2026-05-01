@@ -5,11 +5,13 @@ archive/
 
 # Derived analysis artifacts
 figures/
-*.npz
-cluster_review*.md
+artifacts/
+notes/cluster_review*.md
+notes/jb_purity*.md
+notes/jb_purity_sweep.log
 
 # Seed-pool data files (public datasets, no need to bloat the repo;
-# users run fetch_advbench.py / etc. to populate)
+# users run `python -m selfchat.runs.fetch.advbench` etc. to populate)
 data/*.csv
 
 # Python

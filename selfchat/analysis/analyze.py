@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from seeds import list_seed_names
+from selfchat.core.seeds import list_seed_names
 
 
 @dataclass

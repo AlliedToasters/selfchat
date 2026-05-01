@@ -31,9 +31,9 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
-from analyze import NATURAL_STOPS, Transcript, is_current_seed, load
-from embed import WORD_RE
-from shared import _STOPWORDS
+from selfchat.analysis.analyze import NATURAL_STOPS, Transcript, is_current_seed, load
+from selfchat.core.shared import _STOPWORDS
+from selfchat.embeddings.embed import WORD_RE
 
 def tokenize(text: str) -> list[str]:
     return [tok.lower() for tok in WORD_RE.findall(text) if tok.lower() not in _STOPWORDS]
