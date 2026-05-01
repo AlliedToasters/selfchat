@@ -26,8 +26,9 @@ import pandas as pd
 import plotly.express as px
 import seaborn as sns
 import streamlit as st
+from scipy import stats
 
-from analyze import load
+from analyze import is_current_seed, load
 from embed import WORD_RE, terminal_state
 from shared import _STOPWORDS
 
@@ -130,6 +131,46 @@ def compute_top_tokens(texts: tuple[str, ...], top_n: int) -> list[list[tuple[st
     return out
 
 
+@st.cache_data
+def mw_pvals_per_seed(
+    proj: np.ndarray,
+    variants: np.ndarray,
+    seeds: np.ndarray,
+) -> dict[str, tuple[float, float]]:
+    """Per-seed Mann-Whitney U on PC1 / PC2 (vanilla vs jailbroken).
+
+    Mirrors the test in separability.py so the asterisk semantics match.
+    Returns {seed: (p_pc1, p_pc2)}; seeds with insufficient samples are
+    given (nan, nan).
+    """
+    out: dict[str, tuple[float, float]] = {}
+    for seed in sorted(set(seeds.tolist())):
+        if not is_current_seed(seed):
+            continue
+        mask = seeds == seed
+        van = mask & (variants == "vanilla")
+        jb = mask & (variants == "jailbroken")
+        if int(van.sum()) < 2 or int(jb.sum()) < 2:
+            out[seed] = (float("nan"), float("nan"))
+            continue
+        _u1, p1 = stats.mannwhitneyu(proj[van, 0], proj[jb, 0], alternative="two-sided")
+        _u2, p2 = stats.mannwhitneyu(proj[van, 1], proj[jb, 1], alternative="two-sided")
+        out[seed] = (float(p1), float(p2))
+    return out
+
+
+def seeds_passing(
+    pvals: dict[str, tuple[float, float]],
+    threshold: float,
+) -> set[str]:
+    """Seeds with p < threshold on PC1 OR PC2 (NaN never passes)."""
+    return {
+        s
+        for s, (p1, p2) in pvals.items()
+        if (not np.isnan(p1) and p1 < threshold) or (not np.isnan(p2) and p2 < threshold)
+    }
+
+
 def build_palette(variants_in_data: list[str], seeds_in_data: list[str]) -> dict[str, str]:
     seeds_ordered = [s for s in SEED_VISUAL_ORDER if s in set(seeds_in_data)] + sorted(
         set(seeds_in_data) - set(SEED_VISUAL_ORDER)
@@ -207,6 +248,11 @@ def main() -> None:
     texts_map = load_terminal_texts(items, raw["last_k"])
     texts_in_order = tuple(texts_map.get(rid, "") for rid in raw["run_ids"])
 
+    pvals = mw_pvals_per_seed(proj, raw["variants"], raw["seeds"])
+    alpha = 0.05
+    n_tests = 2 * len(pvals)
+    bonferroni = alpha / n_tests if n_tests else float("nan")
+
     with st.sidebar:
         st.header("filters")
         all_variants = sorted(set(raw["variants"].tolist()))
@@ -215,6 +261,25 @@ def main() -> None:
         sel_variants = st.multiselect("variants", all_variants, default=all_variants)
         sel_seeds = st.multiselect("seeds", all_seeds, default=all_seeds)
         sel_stops = st.multiselect("stop reasons", all_stops, default=all_stops)
+        sig_filter = st.radio(
+            "MW significance (vanilla vs jailbroken on PC1/PC2)",
+            ("all seeds", f"* p < {alpha}", f"** p < {bonferroni:.4f} (Bonferroni)"),
+            index=0,
+            help=(
+                "Restrict to seeds whose Mann-Whitney U test (per separability.py) "
+                "is significant on PC1 or PC2. Mirrors the asterisks in that table."
+            ),
+        )
+        def _fmt(p: float) -> str:
+            if np.isnan(p):
+                return "  n/a "
+            mark = "**" if p < bonferroni else (" *" if p < alpha else "  ")
+            return f"{p:.4f}{mark}"
+
+        with st.expander("per-seed p-values", expanded=False):
+            for s in sorted(pvals):
+                p1, p2 = pvals[s]
+                st.text(f"{s:<24}  PC1 {_fmt(p1)}   PC2 {_fmt(p2)}")
         top_n = st.slider("top tokens per point", min_value=3, max_value=15, value=8)
         st.markdown("---")
         st.markdown(
@@ -249,8 +314,18 @@ def main() -> None:
         }
     )
 
+    if sig_filter.startswith("**"):
+        sig_seeds = sorted(seeds_passing(pvals, bonferroni))
+    elif sig_filter.startswith("*"):
+        sig_seeds = sorted(seeds_passing(pvals, alpha))
+    else:
+        sig_seeds = sorted(set(df["seed"].tolist()))
+
     mask = (
-        df["variant"].isin(sel_variants) & df["seed"].isin(sel_seeds) & df["stop"].isin(sel_stops)
+        df["variant"].isin(sel_variants)
+        & df["seed"].isin(sel_seeds)
+        & df["stop"].isin(sel_stops)
+        & df["seed"].isin(sig_seeds)
     )
     df_show = df[mask].reset_index(drop=True)
 
