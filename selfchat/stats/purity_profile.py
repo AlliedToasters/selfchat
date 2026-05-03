@@ -36,12 +36,10 @@ from scipy.sparse import csr_matrix  # type: ignore[import-not-found]
 from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-not-found]
 
 from selfchat.core.shared import _STOPWORDS
-from selfchat.stats._kmeans import fit_kmeans
+from selfchat.stats._kmeans import fit_kmeans, K_SWEEP, SIZE_FLOOR_DEFAULT
 from selfchat.stats.cluster import load_texts_aligned
-from selfchat.stats.jb_purity_sweep import K_SWEEP, SIZE_FLOOR_DEFAULT
 
 STOPWORDS = list(_STOPWORDS)
-
 
 def balance_per_seed(
     seeds: np.ndarray, target_n: int | None, rng_seed: int
@@ -92,7 +90,7 @@ def main() -> int:
     p.add_argument("npz", type=Path, nargs="?",
                    default=Path("artifacts/emb_msgs.npz"))
     p.add_argument("--transcript-dir", type=Path,
-                   default=Path("archive/transcripts_nonspecific"))
+                   default=Path("transcripts/"))
     p.add_argument("--min-chars", type=int, default=150)
     p.add_argument("--ks", type=int, nargs="+", default=list(K_SWEEP))
     p.add_argument("--kmeans-seeds", type=int, nargs="+", default=[0, 1, 2],

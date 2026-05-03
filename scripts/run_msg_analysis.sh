@@ -10,7 +10,7 @@
 
 # Configuration
 VENV=".venv/bin/python"
-TRANSCRIPT_DIR="archive/transcripts_nonspecific/"
+TRANSCRIPT_DIR="transcripts/"
 EMB_FILE="artifacts/emb_msgs.npz"
 
 # 1. Embed every turn-message of every natural-stop transcript.

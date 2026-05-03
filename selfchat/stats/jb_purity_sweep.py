@@ -24,16 +24,13 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import hypergeom  # type: ignore[import-not-found]
 
-from selfchat.stats._kmeans import fit_kmeans
+from selfchat.stats._kmeans import fit_kmeans, K_SWEEP, SIZE_FLOOR_DEFAULT
 from selfchat.stats.cluster import (
     load_lengths_aligned,
     load_texts_aligned,
     medoid_and_boundary_indices,
     write_review,
 )
-
-K_SWEEP = (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,18,19,20,25, 30, 35, 40, 45, 50)
-SIZE_FLOOR_DEFAULT = 30
 
 
 def jb_purity_per_cluster(
@@ -82,7 +79,7 @@ def main() -> int:
     p.add_argument(
         "--transcript-dir",
         type=Path,
-        default=Path("archive/transcripts_nonspecific"),
+        default=Path("transcripts/"),
     )
     p.add_argument("--min-chars", type=int, default=150)
     p.add_argument("--ks", type=int, nargs="+", default=list(K_SWEEP))

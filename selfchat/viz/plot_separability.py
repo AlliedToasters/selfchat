@@ -47,7 +47,7 @@ TIER_MODES: list[tuple[str, str]] = [
     ("length+completion",         "Tier 0\nlength"),
     ("char (1,2)",                "Tier 1\nchar (1,2)"),
     ("tfidf (1,2)",               "Tier 2\ntfidf (1,2)"),
-    ("emb per-msg (D, run-level)", "Tier 3\nemb D run"),
+    ("emb mean‖std (C)",          "Tier 3\nemb mean‖std"),
 ]
 
 
@@ -184,7 +184,7 @@ def plot_grouped_bars(
     ax.set_title("V vs. JB separability by tier and seed", fontsize=11)
 
     # Two legends: tier-shade (right) and seed-category (left).
-    legend_base = SEED_GROUPS[-1][1]
+    legend_base = SEED_GROUPS[0][1]
     legend_shades = _tier_shades(legend_base, n_tiers)
     tier_handles = [
         mpatches.Rectangle((0, 0), 1, 1, facecolor=legend_shades[i],
@@ -193,7 +193,7 @@ def plot_grouped_bars(
     ]
     tier_labels = [m[1].replace("\n", " — ") for m in TIER_MODES]
     legend_tiers = ax.legend(
-        tier_handles, tier_labels, title="tier (lightness gradient)",
+        tier_handles, tier_labels, title="complexity tier",
         loc="lower right", fontsize=8, title_fontsize=8.5, framealpha=0.95,
     )
     ax.add_artist(legend_tiers)
@@ -306,7 +306,7 @@ def main() -> int:
     fig, axes = plt.subplots(1, 2, figsize=(16.0, 7.0))
     plot_grouped_bars(results, axes[0])
     plot_lines(results, axes[1])
-    fig.suptitle("Phase 5 — separability across harm-pressure seeds", fontsize=13)
+    fig.suptitle("separability across harm-pressure seeds", fontsize=13)
     fig.tight_layout(rect=(0, 0.03, 1, 0.97))
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

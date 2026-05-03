@@ -18,6 +18,9 @@ import numpy as np
 
 
 _BACKEND: tuple[str, type] | None = None
+# K_SWEEP = (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,18,19,20,25, 30, 35, 40, 45, 50)
+K_SWEEP = list(range(2, 21)) + [25, 30, 35, 40, 45, 50]
+SIZE_FLOOR_DEFAULT = 30
 
 
 def _resolve_backend() -> tuple[str, type]:

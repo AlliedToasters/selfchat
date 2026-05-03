@@ -103,7 +103,7 @@ def main() -> int:
     p.add_argument("npz", type=Path, nargs="?", default=Path("artifacts/emb_msgs.npz"),
                    help="Used for metadata alignment + completed-only filtering")
     p.add_argument("--transcript-dir", type=Path,
-                   default=Path("archive/transcripts_nonspecific"))
+                   default=Path("transcripts/"))
     p.add_argument("--min-chars", type=int, default=150)
     p.add_argument("--ks", type=int, nargs="+", default=list(K_SWEEP))
     p.add_argument("--seeds", type=int, nargs="+", default=[0],

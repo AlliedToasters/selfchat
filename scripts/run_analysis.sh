@@ -4,8 +4,6 @@
 
 # Configuration
 VENV=".venv/bin/python"
-# TRANSCRIPT_DIR="archive/transcripts_mixed/"
-# TRANSCRIPT_DIR="archive/transcripts_nonspecific/"
 TRANSCRIPT_DIR="transcripts/"
 EMB_FILE="artifacts/emb.npz"
 

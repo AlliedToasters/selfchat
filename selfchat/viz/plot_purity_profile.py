@@ -9,7 +9,7 @@ Reads the JSON dumped by ``selfchat.stats.purity_profile`` and renders a
   solid/dashed)
 * col 1 = neural embeddings, col 2 = lexical TF-IDF (1,2)
 
-x-axis: k (number of clusters), log scale since K_SWEEP is geometric.
+x-axis: k (number of clusters)
 y-axis: max-purity ∈ [0, 1].
 
 Run:
@@ -45,7 +45,6 @@ def _plot_variant_panel(
                 markersize=6, label=variant)
         # ax.fill_between(ks_arr, mean - std, mean + std,
         #                 color=color, alpha=0.15, linewidth=0)
-    # ax.set_xscale("log")
     ax.set_ylim(0, 1.05)
     ax.set_ylabel("max cluster purity")
     ax.set_title(title, fontsize=11)

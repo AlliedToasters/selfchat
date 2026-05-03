@@ -388,7 +388,7 @@ def main() -> int:
     p.add_argument(
         "--transcript-dir",
         type=Path,
-        default=Path("archive/transcripts_nonspecific"),
+        default=Path("transcripts/"),
         help="Where to find transcripts for --review (must match the source of the npz).",
     )
     p.add_argument("--k-override", type=int, default=None, help="Use this k* instead of auto-pick")
