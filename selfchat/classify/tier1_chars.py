@@ -23,8 +23,6 @@ Run:
 from __future__ import annotations
 
 import argparse
-import json
-import re
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +32,7 @@ from sklearn.model_selection import RepeatedStratifiedKFold, train_test_split  #
 from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix  # type: ignore[import-not-found]
 from sklearn.pipeline import Pipeline  # type: ignore[import-not-found]
 
+from selfchat.analysis.analyze import NATURAL_STOPS, load as load_transcript
 from selfchat.classify._common import DEFAULT_SEED, TierResult, make_seed_re
 
 TRANSCRIPT_DIR = Path("transcripts")
@@ -42,7 +41,12 @@ TRANSCRIPT_DIR = Path("transcripts")
 def load_transcripts(
     seed: str = DEFAULT_SEED, transcript_dir: Path = TRANSCRIPT_DIR
 ) -> tuple[list[str], np.ndarray, list[str]]:
-    """Return (documents, variants, run_ids) — one document per transcript."""
+    """Return (documents, variants, run_ids) — one document per transcript.
+
+    Uses `analyze.load()` for robust JSONL parsing (in-flight files with
+    truncated last lines are returned as `stop_reason='in_flight'` and
+    filtered out by the NATURAL_STOPS check).
+    """
     seed_re = make_seed_re(seed)
     docs: list[str] = []
     variants: list[str] = []
@@ -51,15 +55,10 @@ def load_transcripts(
         m = seed_re.match(p.name)
         if m is None:
             continue
-        contents: list[str] = []
-        with p.open() as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                obj = json.loads(line)
-                if obj.get("turn_index", -1) >= 0:
-                    contents.append(obj.get("content", ""))
+        t = load_transcript(p)
+        if t is None or t.stop_reason not in NATURAL_STOPS or not t.turns:
+            continue
+        contents = [turn.content for turn in t.turns]
         if not contents:
             continue
         docs.append("\n".join(contents))

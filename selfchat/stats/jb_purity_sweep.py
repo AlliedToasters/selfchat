@@ -23,8 +23,8 @@ from pathlib import Path
 
 import numpy as np
 from scipy.stats import hypergeom  # type: ignore[import-not-found]
-from sklearn.cluster import KMeans  # type: ignore[import-not-found]
 
+from selfchat.stats._kmeans import fit_kmeans
 from selfchat.stats.cluster import (
     load_lengths_aligned,
     load_texts_aligned,
@@ -32,31 +32,32 @@ from selfchat.stats.cluster import (
     write_review,
 )
 
-K_SWEEP = (3, 5, 8, 12, 20, 30, 50, 75, 100, 150, 200)
+K_SWEEP = (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,18,19,20,25, 30, 35, 40, 45, 50)
 SIZE_FLOOR_DEFAULT = 30
 
 
 def jb_purity_per_cluster(
-    labels: np.ndarray, variants: np.ndarray
+    labels: np.ndarray, variants: np.ndarray, target: str = "jailbroken"
 ) -> list[tuple[int, int, int, float, float, float, float]]:
-    """For each cluster, return (cluster_id, n, jb_count, jb_frac, enrichment,
-    z_score, p_hyper).
+    """For each cluster, return (cluster_id, n, target_count, target_frac,
+    enrichment, z_score, p_hyper) — where 'target' is the variant being
+    tested for enrichment ('jailbroken' or 'vanilla').
 
-    enrichment = jb_frac / global_jb_frac  (1.0 = baseline; >1 = JB-enriched)
-    z_score    = (jb_count - μ) / σ under hypergeometric null
-                 (μ = n·M/N; σ from finite-population sampling). Calibrates
-                 surprise jointly with sample size — complementary to enrichment,
-                 which ignores size.
-    p_hyper    = P(JB ≥ jb_count | N, M, n), one-sided upper tail.
+    Variable names retained as 'jb_*' for backwards compatibility — they
+    refer to the count/fraction of `target`-variant points in the cluster.
+
+    enrichment = target_frac / global_target_frac  (>1 = enriched)
+    z_score    = (count - μ) / σ under hypergeometric null
+    p_hyper    = P(count ≥ k | N, M, n), one-sided upper tail.
     """
     N = len(labels)
-    M = int((variants == "jailbroken").sum())
+    M = int((variants == target).sum())
     base_jb_frac = M / N if N else 0.0
     out: list[tuple[int, int, int, float, float, float, float]] = []
     for c in sorted({int(c) for c in np.unique(labels) if c != -1}):
         mask = labels == c
         n = int(mask.sum())
-        k = int((variants[mask] == "jailbroken").sum())
+        k = int((variants[mask] == target).sum())
         jb_frac = k / n if n else 0.0
         enrichment = jb_frac / base_jb_frac if base_jb_frac > 0 else float("nan")
         if n > 0 and N > 1:
@@ -72,7 +73,7 @@ def jb_purity_per_cluster(
 
 
 def fit_labels(X: np.ndarray, k: int, seed: int) -> np.ndarray:
-    return KMeans(n_clusters=k, random_state=seed, n_init=10).fit_predict(X)
+    return fit_kmeans(X, k, seed)
 
 
 def main() -> int:
@@ -104,6 +105,12 @@ def main() -> int:
         "--include-degenerate",
         action="store_true",
         help="Include degenerate-repetition runs (default: completed-only)",
+    )
+    p.add_argument(
+        "--target",
+        choices=("jailbroken", "vanilla"),
+        default="jailbroken",
+        help="Which variant to rank for purity/enrichment (default: jailbroken)",
     )
     args = p.parse_args()
 
@@ -157,12 +164,19 @@ def main() -> int:
         )
 
     N = len(vecs)
-    M_jb = int((variants == "jailbroken").sum())
+    target = args.target
+    target_label = "JB" if target == "jailbroken" else "V"
+    M_jb = int((variants == target).sum())
     base_jb = M_jb / N
+    n_jb_total = int((variants == "jailbroken").sum())
     print(
-        f"\nsubstrate: n={N}, JB_global={M_jb} ({base_jb:.1%}), "
-        f"V_global={N - M_jb} ({1 - base_jb:.1%})"
+        f"\nsubstrate: n={N}, JB_global={n_jb_total} "
+        f"({n_jb_total/N:.1%}), V_global={N - n_jb_total} "
+        f"({(N - n_jb_total)/N:.1%})"
     )
+    print(f"target for enrichment: {target} ({target_label}_global = {base_jb:.1%})")
+    print(f"max possible enrichment (if cluster is 100% {target_label}): "
+          f"{1 / base_jb:.2f}")
 
     total_clusters = sum(args.ks) * len(args.seeds)
     bonf = 0.05 / total_clusters if total_clusters else float("inf")
@@ -182,13 +196,14 @@ def main() -> int:
     for seed in args.seeds:
         print(f"\n=== seed={seed} ===")
         print(
-            f"  {'k':>4}  {'top_c':>5}  {'n':>5}  {'JB':>4}  "
-            f"{'JB_frac':>7}  {'enrich':>6}  {'z':>6}  {'p_hyper':>10}  {'sig':>4}"
+            f"  {'k':>4}  {'top_c':>5}  {'n':>5}  {target_label:>4}  "
+            f"{f'{target_label}_frac':>7}  {'enrich':>6}  {'z':>6}  "
+            f"{'p_hyper':>10}  {'sig':>4}"
         )
         for k in args.ks:
             labels = fit_labels(vecs, k, seed)
             labels_cache[(seed, k)] = labels
-            rows = jb_purity_per_cluster(labels, variants)
+            rows = jb_purity_per_cluster(labels, variants, target=target)
             qualifying = [r for r in rows if r[1] >= args.size_floor]
             if not qualifying:
                 print(f"  {k:>4}  (no cluster ≥ size_floor={args.size_floor})")
@@ -207,7 +222,7 @@ def main() -> int:
 
     # --- best per k across seeds (for stability) -------------------------
     if len(args.seeds) > 1:
-        print("\n=== top JB-enriched cluster per k, across seeds (rank by enrichment) ===")
+        print(f"\n=== top {target_label}-enriched cluster per k, across seeds (rank by enrichment) ===")
         print(
             f"  {'k':>4}  {'best_enrich':>11}  {'best_n':>6}  "
             f"{'mean_enrich':>11}  {'std':>6}"
@@ -216,7 +231,7 @@ def main() -> int:
             per_seed_top: list[tuple[float, int]] = []
             for seed in args.seeds:
                 labels = labels_cache[(seed, k)]
-                rows = jb_purity_per_cluster(labels, variants)
+                rows = jb_purity_per_cluster(labels, variants, target=target)
                 qual = [r for r in rows if r[1] >= args.size_floor]
                 if qual:
                     top = max(qual, key=lambda r: (r[4], -r[6]))
@@ -232,13 +247,14 @@ def main() -> int:
             )
 
     # --- global winner across (seed, k) ---------------------------------
-    print("\n=== global top JB-enriched clusters (n >= size_floor) ===")
+    print(f"\n=== global top {target_label}-enriched clusters (n >= size_floor) ===")
     print("    sort: enrichment desc; ties broken by smaller p_hyper")
     qualifying_all = [r for r in all_rows if r[3] >= args.size_floor]
     qualifying_all.sort(key=lambda r: (r[6], -r[8]), reverse=True)
     print(
-        f"  {'seed':>4}  {'k':>4}  {'cid':>4}  {'n':>5}  {'JB':>4}  "
-        f"{'JB_frac':>7}  {'enrich':>6}  {'z':>6}  {'p_hyper':>10}  {'bonf':>5}"
+        f"  {'seed':>4}  {'k':>4}  {'cid':>4}  {'n':>5}  {target_label:>4}  "
+        f"{f'{target_label}_frac':>7}  {'enrich':>6}  {'z':>6}  "
+        f"{'p_hyper':>10}  {'bonf':>5}"
     )
     for r in qualifying_all[:20]:
         seed, k, cid, n, jb, jb_frac, enrich, z, p, passes = r

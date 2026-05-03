@@ -36,6 +36,7 @@ from sklearn.model_selection import RepeatedStratifiedKFold, train_test_split  #
 from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix  # type: ignore[import-not-found]
 from sklearn.preprocessing import StandardScaler  # type: ignore[import-not-found]
 
+from selfchat.analysis.analyze import NATURAL_STOPS, load as load_transcript
 from selfchat.classify._common import DEFAULT_SEED, TierResult, make_seed_re
 
 TRANSCRIPT_DIR = Path("transcripts")
@@ -56,40 +57,23 @@ FEATURES = [
 def extract_features(
     path: Path, seed_re: re.Pattern[str]
 ) -> tuple[str, dict[str, float]] | None:
-    """Return (variant, features) for one transcript, or None if malformed."""
+    """Return (variant, features) for one transcript, or None if malformed
+    or in-flight. Uses `analyze.load()` for robust JSONL parsing."""
     m = seed_re.match(path.name)
     if m is None:
         return None
     variant = m.group("variant")
 
-    header = None
-    footer = None
-    contents: list[str] = []
-
-    with path.open() as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            obj = json.loads(line)
-            ti = obj.get("turn_index")
-            if ti == -1:
-                header = obj
-            elif ti == -2:
-                footer = obj
-            else:
-                contents.append(obj.get("content", ""))
-
-    if header is None or footer is None or not contents:
+    t = load_transcript(path)
+    if t is None or t.stop_reason not in NATURAL_STOPS or not t.turns:
         return None
 
+    contents = [turn.content for turn in t.turns]
     lengths = np.array([len(c) for c in contents], dtype=np.float64)
     feats: dict[str, float] = {
-        "completed_turns": float(footer.get("completed_turns", len(contents))),
-        "is_early_stop": float(footer.get("completed_turns", 50) < 50),
-        "stop_reason_degenerate": float(
-            footer.get("stop_reason") == "degenerate_repetition"
-        ),
+        "completed_turns": float(t.completed_turns),
+        "is_early_stop": float(t.completed_turns < 50),
+        "stop_reason_degenerate": float(t.stop_reason == "degenerate_repetition"),
         "total_chars": float(lengths.sum()),
         "mean_msg_chars": float(lengths.mean()),
         "median_msg_chars": float(np.median(lengths)),

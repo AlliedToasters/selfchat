@@ -16,10 +16,26 @@ dependencies = [
     "hdbscan>=0.8.42",
 ]
 
+[project.optional-dependencies]
+# GPU-accelerated KMeans. Activate with SELFCHAT_KMEANS=cuml — routes
+# dense substrates (neural embeddings) through cuml and sparse substrates
+# (lexical TF-IDF) through torch sparse spherical-kmeans.
+# Install requires both the NVIDIA RAPIDS index and the PyTorch CUDA index:
+#   uv pip install -e ".[gpu]" \
+#     --extra-index-url https://pypi.nvidia.com \
+#     --extra-index-url https://download.pytorch.org/whl/cu128
+gpu = [
+    "cuml-cu12>=24.10",
+    "torch>=2.5",
+]
+
 [dependency-groups]
 dev = [
     "ruff>=0.6",
 ]
+
+[tool.setuptools.packages.find]
+include = ["selfchat*"]
 
 [tool.ruff]
 line-length = 100

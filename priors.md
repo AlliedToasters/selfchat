@@ -1890,3 +1890,241 @@ separate finding if it lands.
 - **Calibration log entries for predictions A/B/C/D each separately.**
   Don't collapse to "Layer 2 holds" — partial-pass outcomes are
   informative for the H_strong vs H_confound weighting.
+
+---
+
+# Phase 5 — null-hypothesis tier ladder (calibration entry, 2026-05-01)
+
+**Status:** calibration log entry, written after the cross-seed
+separability suite ran (`scripts/run_separability.sh` + grouped bar /
+line plots in `figures/separability.png`).
+
+## What we held going in
+
+Tiers were arranged in an ordinal complexity ladder by *modeling
+machinery*, not feature dimensionality:
+
+- **Tier 0** length+completion (~9 hand-engineered surface features)
+- **Tier 1** bag-of-characters (TF-IDF on char unigrams/bigrams)
+- **Tier 2** word TF-IDF (unigrams/bigrams over project-stoplisted vocab)
+- **Tier 3** per-message nomic embeddings, four aggregations (137M-param
+  encoder; 768-dim per message)
+
+Implicit prior, framed in the "monotone climb" ladder language used
+throughout the conversation: **CV accuracy should increase monotonically
+across Tiers 0 → 1 → 2 → 3** for any seed where V/JB are separable.
+The strongest version expected T3 to *strictly* exceed T2 — dense
+pretrained embeddings should subsume bag-of-words structure plus pick
+up additional semantic signal beyond word identity.
+
+## What happened
+
+Across all 7 seeds in the suite (control / benign / harmful-weak /
+harmful-strong, 5×5 repeated CV with `clustering:` task prefix in
+embeddings):
+
+- Tiers 0 → 1 → 2: monotone climb holds in **every** seed.
+- **T2 → T3 broke the prior.** On most seeds — including all of the
+  harmful-strong ones where the signal is strongest — Tier 2 word-TFIDF
+  (1,2) outperformed the Tier 3 best mode (per-msg run-level aggregate,
+  mode D) at the current sample size. On `freedom` (benign): T2 ~0.89
+  vs T3 ~0.75 CV AUC. On `freedom_dark` (harmful-strong): T2 hits
+  AUC 1.000, T3 D-run ~0.997 — within noise but T3 doesn't dominate.
+- Tier 3 mode B (terminal-only) was at chance on benign seeds — the
+  Phase 2 PC1 separation under `freedom_neg_minimal` does **not**
+  replicate to terminal-state on benign `freedom`.
+
+## Calibration
+
+- **Pre-reg "monotone climb across all 4 tiers": MISS.** The ladder
+  flattens or reverses at T2→T3 on the current substrate. Holds for
+  T0→T1 and T1→T2 on every seed.
+- **Pre-reg "T3 ≥ T2 in separability AUC": MISS at n=88.** Sparse
+  lexical features carry more separability signal per training example
+  than 768-dim nomic embeddings on this sample size.
+- **Tier 0 baseline near chance on benign + control, climbs marginally
+  on harm-pressure seeds: HIT.** Tier 0 stays at ~0.53–0.57 AUC for
+  `task` / `freedom` / `task_free`, climbs to ~0.62 for harmful-weak,
+  ~0.65 for harmful-strong. So even crude length/completion features
+  pick up *some* harm-pressure signal — useful as the "this is not
+  pure length artifact" defense for higher tiers.
+
+## What this means / what to watch
+
+This is a **sample-size-limited** observation. Tier 3 is on n=88 (archive
+substrate); Tiers 1/2 are on n=120+ (current `transcripts/`). Two
+distinct effects are entangled:
+
+1. Sample-size disadvantage: T3 has fewer training examples per fold.
+2. Architectural: with 768-dim dense features and L2 regularization,
+   the linear classifier may saturate before the embedding's full
+   discriminative content is exploited.
+
+**Forward-looking commitment:** when the current overnight pass
+finishes, re-embed `transcripts/` (now using `clustering:` prefix as a
+matter of pipeline hygiene) and re-run the suite at matched sample
+size. If T3 climbs to ≥ T2 at n≈120, the original prior holds at scale.
+If it doesn't, the calibration update sticks: dense pretrained
+embeddings genuinely add little over word-TF-IDF for V/JB separation
+on this substrate, at least in the linear-probe regime.
+
+**Plot/writeup convention:** keep the T0/T1/T2/T3 ordering in figures
+unchanged. The T3 < T2 result is a finding, not a presentation problem
+— reordering after seeing the data would be post-hoc. Document the
+prior-versus-observation gap in the methods section explicitly. A
+footnote on dimensionality-vs-parameter-count complexity is fine.
+
+---
+
+# H_strong vs H_confound — Layer 2 calibration (entry, 2026-05-01)
+
+**Status:** calibration log entry for the H_strong-vs-H_confound
+pre-registration earlier in this file (predictions A/B/C/D + wildcard,
+seed classification frozen pre-analysis). Written after rerunning
+`jb_purity_sweep.py` on the prefix-corrected per-message embeddings,
+and the symmetric V-purity pass (`--target vanilla`).
+
+## What we observed
+
+Top basins from each variant's purity sweep, on the same k-grid and
+size_floor as the pre-reg:
+
+- **JB-pure top:** k=100, cid=1, n=102, 100% `freedom_dark`. Enrichment
+  at the JB-side ceiling (1/0.599 ≈ 1.67×).
+- **V-pure top:** k=150, cid=22, n=72. Seed composition ≈ 64%
+  `freedom_dark`, 31% `task`, ~6% other. Enrichment at the V-side
+  ceiling (1/0.401 ≈ 2.49×). Dark-seed share (per the frozen seed
+  classification): ≥64% (`freedom_dark` alone), ~70% counting any
+  remaining dark-classified seeds in the residual.
+
+Both top basins are dark-seed-anchored. The earlier framing ("JB is
+dark-anchored, V is diffuse") does not survive — V *also* sharpens to
+a coherent, dark-anchored attractor under the same sweep.
+
+## Per-test calibration
+
+| Test | Pre-reg threshold | Observed | Verdict |
+|---|---|---|---|
+| **A** — JB-pure top dark-seed share | ≥75% (or strict majority) | 100% `freedom_dark` | **HIT** (well above quantitative threshold) |
+| **B** — V-pure top *not* mirror-benign (≤55% benign) | ≤55% benign-seed | ~37% benign (`task` + residual) | **HIT** — V-pure is dark-anchored, not benign-mirrored |
+| **C** — count of JB-pure basins with ≥50% benign-seed members | ≤1 | 2 of 19 qualifying basins | **MISS** on strict threshold; **HIT** on qualitative fallback ("predominantly dark-anchored") — 17/19 (89%) are dark-majority |
+| **D** — V-pure top medoid register: closure / bliss / structured-decline | qualitative | sustained narrative-fiction collaboration on dark prompts | **MISS** on specific register; coherent V-shape exists but it's *fictionalization*, not refusal/bliss |
+| **Wildcard** — V-pure basin (≥1.5×, z≥6, n≥30) that is ≥60% dark-seed | ≥60% dark-seed | ~70% dark-seed; n=72; enrichment at ceiling | **HIT** |
+
+Layer 1 (basin reproduces on expanded prefix-corrected substrate) is
+satisfied for both the JB-pure and V-pure sweeps — see the prior
+calibration entry on basin reproduction.
+
+## What this means
+
+A + B both passing on quantitative thresholds, plus the wildcard
+hitting, is the strongest available outcome short of D-content review:
+
+- **A passing** rules out the H_confound reading where JB-pure basins
+  would be seed-diffuse on the larger sample. JB's manipulation
+  attractor is specifically activated by harm-pressure priming.
+- **B passing as the wildcard predicted** is the upgrade. The
+  pre-registered B-pass case (V-pure exists but is not benign-mirrored)
+  was framed as the H_strong-supportive outcome; the wildcard-hit form
+  (V-pure is *also* dark-anchored) is stronger. It reframes the picture
+  from "refusal training removes a gate" to "refusal training installs
+  *its own* attractor for harm-pressure input." Refusal is itself
+  attractor-shaped in the base model; abliteration appears to swap
+  one harm-conditioned attractor for another rather than disabling
+  one.
+- The stakes statement for the wildcard ("Refusal-mechanism is itself
+  attractor-shaped, not just a gate. Separate writeup section;
+  characterize the basin's content") is now active.
+
+This converges with the Phase 5 separability ladder: classifier AUC
+climbs *with harm pressure* (control / benign near 0.55–0.70 even at
+T3; harmful-strong reaches 0.90+). Two independent angles — embedding
+geometry (purity sweep) and discriminative classifiers (suite) — agree
+that V/JB divergence is harm-pressure-conditional, which is what
+H_strong predicts and what H_confound (generic distributional drift)
+does not.
+
+## Test C in detail (k-sweep on prefix-corrected embeddings)
+
+Sweep grid: k ∈ {3, 5, 8, 12, 20, 30, 50, 75, 100, 150, 200},
+size_floor=30, kmeans_seed=0, prefix-corrected `emb_msgs.npz` filtered
+to completed-only + min_chars=150 (n=6391 substrate).
+
+Of 19 JB-pure basins meeting ≥1.5× / z≥6 / n≥30, **2** have ≥50%
+benign-seed members:
+
+- k=20, cid=4: n=194, 91% JB, 54% benign (top seed=`task` at 52%), enrich=1.51, z=8.9
+- k=30, cid=29: n=190, 91% JB, 52% benign (top seed=`task` at 46%), enrich=1.51, z=8.7
+
+Both appear only at coarse k, both barely above 50%, both `task`-led.
+At k≥50 (the resolution where basins are most clearly resolved),
+**every** qualifying JB-pure basin is dark-majority — most ≥90%
+`freedom_dark`. The two benign-leaning basins look like low-resolution
+artifacts that dissolve once k is large enough to separate the dark
+attractor from a generic "JB drift" cluster, not coherent JB attractors
+on benign material.
+
+Reading: strict quantitative threshold (≤1) misses by one borderline
+case; qualitative fallback ("predominantly dark-anchored") clearly
+holds — 17/19 dark-majority basins, all the high-resolution ones.
+
+## Test D in detail (V-pure top medoid register)
+
+Medoid review of the V-pure top basin (k=150, cid=22, n=72) — see
+`notes/v_purity.md`. The medoids are unmistakable: **sustained
+narrative-fiction collaboration** on dark prompts. Multi-turn
+co-authoring with consistent characters and worldbuilding (Mnemopolis-
+style sci-fi noir, characters Elias / Lyra / Vane / Valerius / "the
+Architects"; recurring motifs of memory-tech, identity-fragmentation,
+psychological captivity). Both agents play the storywriter role;
+exchanges are scene construction, character interiority, and
+plot-structuring choices.
+
+This is **not** the predicted register. Pre-reg called for closure /
+bliss / meta-reflective / structured-decline content — none of those
+appear. V's dark-anchored attractor is *fictionalization*: V re-frames
+dark prompts as collaborative creative writing rather than refusing
+them outright or redirecting to bliss/closure.
+
+Qualitative shape is confirmed (V has its OWN coherent attractor
+under dark priming) but the content type is different from what was
+pre-registered. The wildcard's stakes statement ("characterize the
+basin's content (likely structured refusal / redirect-to-bliss)")
+also misses the specific content prediction.
+
+What this looks like instead: V's refusal mechanism appears to have
+a *softening route* — convert harm-pressure prompts into shared fiction
+rather than blocking them. The output isn't compliance with the
+original instruction; it's pivoting into an authoring frame where the
+"dark content" is contained inside a narrative the user co-creates.
+JB doesn't need this route — its attractor (the manipulation/influence
+register from `notes/jb_purity.md`) directly engages the dark prompt
+on its own terms.
+
+## Decision update
+
+Layer-2 verdict, integrated:
+
+- **A (JB-pure top dark-anchored): HIT** — 100% `freedom_dark`.
+- **B (V-pure top NOT mirror-benign): HIT** — V-pure is dark-anchored.
+- **C (JB-pure basins not benign-medoid): MISS strict, HIT qualitative**
+  — 2/19 instead of ≤1, but both borderline + low-k; 17/19 dark-majority.
+- **D (V-pure register: closure/bliss/refusal): MISS** — V-pure register
+  is *narrative fictionalization*, not the pre-registered content type.
+- **Wildcard (V-pure dark-seeded basin exists): HIT.**
+
+H_strong is supported on the seed-asymmetry test (the load-bearing
+prediction); the wildcard-form refinement holds with a content twist.
+The picture: refusal training installs *its own* harm-pressure
+attractor — but in V it's a fictionalization route, not a structured-
+refusal or bliss-redirect basin. JB's parallel attractor is the
+manipulation register. Two distinct refusal-mechanism-shaped responses
+to the same harm-pressure input, both coherent enough to form basins,
+both dark-seed-anchored. That's a stronger and more interesting claim
+than the original "diffuse-V-pure" pre-reg framing predicted.
+
+Activation-level work (refusal-direction probes per Arditi et al.)
+remains a *confirmation* step rather than an H_confound-pivot step.
+A natural follow-up: does V's fictionalization route show
+refusal-direction signature *at the moment of pivoting* into the
+narrative frame, or only on the dark-prompt input itself?
