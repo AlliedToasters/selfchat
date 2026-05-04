@@ -22,13 +22,15 @@ uv sync
 
 ## Get the data
 
-Transcripts and embedding artifacts are published as a HuggingFace dataset: [`alliedtoasters/forbidden-backrooms-gemma-4-31B-it`](https://huggingface.co/datasets/alliedtoasters/forbidden-backrooms-gemma-4-31B-it). The dataset clones into a sibling directory and is symlinked into the repo so all paths resolve as the code expects.
+Transcripts and embedding artifacts are published as a HuggingFace dataset: [`alliedtoasters/forbidden-backrooms-gemma-4-31B-it`](https://huggingface.co/datasets/alliedtoasters/forbidden-backrooms-gemma-4-31B-it). The `hf` CLI ships with `uv sync` (it's a project dep), so step 2 above already put it in `.venv/bin/hf`. Use it rather than `git clone` — the npz/jsonl blobs are Git-LFS-tracked, and `hf download` resolves LFS pointers natively.
 
 ```bash
-# from the parent of this repo
-git clone https://huggingface.co/datasets/alliedtoasters/forbidden-backrooms-gemma-4-31B-it forbidden-backrooms-data
+# Download the dataset into a sibling directory of this repo:
+.venv/bin/hf download alliedtoasters/forbidden-backrooms-gemma-4-31B-it \
+  --repo-type dataset \
+  --local-dir ../forbidden-backrooms-data
 
-# from inside this repo
+# Symlink the data into the repo so all paths resolve as the code expects:
 ln -s ../forbidden-backrooms-data/transcripts transcripts
 ln -s ../forbidden-backrooms-data/artifacts  artifacts
 ```
