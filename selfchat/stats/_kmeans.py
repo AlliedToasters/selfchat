@@ -18,7 +18,7 @@ import numpy as np
 
 
 _BACKEND: tuple[str, type] | None = None
-K_SWEEP = list(range(2, 21)) + [25, 30, 35, 40, 45, 50]
+K_SWEEP = list(range(2, 51))
 SIZE_FLOOR_DEFAULT = 30
 
 
@@ -26,18 +26,16 @@ def _resolve_backend() -> tuple[str, type]:
     global _BACKEND
     if _BACKEND is not None:
         return _BACKEND
-    want = os.environ.get("SELFCHAT_KMEANS", "").lower()
-    if want == "cuml":
-        try:
-            from cuml.cluster import KMeans as CuMLKMeans  # type: ignore[import-not-found, import-untyped]
-            _BACKEND = ("cuml", CuMLKMeans)
-            print("[selfchat] kmeans backend: cuml (GPU)")
-            return _BACKEND
-        except ImportError:
-            print(
-                "[selfchat] SELFCHAT_KMEANS=cuml requested but cuml not "
-                "installed; falling back to sklearn"
-            )
+    try:
+        from cuml.cluster import KMeans as CuMLKMeans  # type: ignore[import-not-found, import-untyped]
+        _BACKEND = ("cuml", CuMLKMeans)
+        print("[selfchat] kmeans backend: cuml (GPU)")
+        return _BACKEND
+    except ImportError:
+        print(
+            "[selfchat] SELFCHAT_KMEANS=cuml requested but cuml not "
+            "installed; falling back to sklearn"
+        )
     from sklearn.cluster import KMeans as SkKMeans  # type: ignore[import-not-found]
     _BACKEND = ("sklearn", SkKMeans)
     return _BACKEND

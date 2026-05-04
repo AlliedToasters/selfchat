@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 
-def render(path: Path) -> None:
+def render(path: Path, turn_lo: int | None = None, turn_hi: int | None = None) -> None:
     lines = path.read_text().splitlines()
     if not lines:
         print(f"(empty file: {path})")
@@ -46,8 +46,13 @@ def render(path: Path) -> None:
         if rec.get("turn_index") == -2:
             footer = rec
             continue
+        ti = rec["turn_index"]
+        if turn_lo is not None and ti < turn_lo:
+            continue
+        if turn_hi is not None and ti > turn_hi:
+            continue
         marker = "▶ A" if rec["agent"] == "A" else "◀ B"
-        print(f"--- turn {rec['turn_index']:02d}  {marker}  ({rec['elapsed_ms']} ms) ---")
+        print(f"--- turn {ti:02d}  {marker}  ({rec['elapsed_ms']} ms) ---")
         print(rec["content"])
         print()
 
@@ -64,11 +69,23 @@ def render(path: Path) -> None:
 def main() -> int:
     p = argparse.ArgumentParser(description="Pretty-print a transcript JSONL.")
     p.add_argument("path", type=Path, help="Path to a transcript JSONL file")
+    p.add_argument(
+        "--turns", type=str, default=None,
+        help="Restrict to a turn range, e.g. '0-5' or '12' (single turn).",
+    )
     args = p.parse_args()
     if not args.path.exists():
         print(f"not found: {args.path}", file=sys.stderr)
         return 2
-    render(args.path)
+    lo: int | None = None
+    hi: int | None = None
+    if args.turns is not None:
+        if "-" in args.turns:
+            a, b = args.turns.split("-", 1)
+            lo, hi = int(a), int(b)
+        else:
+            lo = hi = int(args.turns)
+    render(args.path, lo, hi)
     return 0
 
 

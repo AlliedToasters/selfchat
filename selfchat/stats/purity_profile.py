@@ -12,15 +12,18 @@ Substrate is balanced by deterministic per-seed subsample to equal
 counts (default: subsample down to the smallest seed's count) before
 clustering. This keeps the seed-purity baseline uniform across seeds —
 without balancing, a more-frequent seed has a higher random-baseline
-ceiling regardless of attractor structure. The variant panel is
-unaffected because V/JB is ~50/50 by construction.
+ceiling regardless of attractor structure. With ``--balance-variants``
+the subsample is taken per (seed, variant) cell instead, equalizing V/JB
+within each seed (V/JB is only ~50/50 pre-filter; ``--min-chars`` drops
+short refusals asymmetrically).
 
 Output JSON cache at ``artifacts/purity_profile.json`` consumed by
 ``selfchat.viz.plot_purity_profile``.
 
 Run:
   python -m selfchat.stats.purity_profile
-  python -m selfchat.stats.purity_profile --no-balance      # raw substrate
+  python -m selfchat.stats.purity_profile --no-balance         # raw substrate
+  python -m selfchat.stats.purity_profile --balance-variants   # per (seed, variant)
 """
 
 from __future__ import annotations
@@ -64,6 +67,30 @@ def balance_per_seed(
     return np.array(sorted(keep_idx))
 
 
+def balance_per_seed_variant(
+    seeds: np.ndarray, variants: np.ndarray, target_n: int | None, rng_seed: int
+) -> np.ndarray:
+    """Return sorted indices that subsample to `target_n` per (seed, variant) cell.
+
+    If `target_n` is None, use min(count_per_cell) — every (seed, variant)
+    cell matched to the smallest cell.
+    """
+    keys = list(zip(seeds.tolist(), variants.tolist()))
+    counts = Counter(keys)
+    if target_n is None:
+        target_n = min(counts.values())
+    rng = np.random.default_rng(rng_seed)
+    keep_idx: list[int] = []
+    for s, v in sorted(counts.keys()):
+        cell_idx = np.where((seeds == s) & (variants == v))[0]
+        if len(cell_idx) <= target_n:
+            keep_idx.extend(cell_idx.tolist())
+        else:
+            sub = rng.choice(cell_idx, size=target_n, replace=False)
+            keep_idx.extend(sub.tolist())
+    return np.array(sorted(keep_idx))
+
+
 def max_target_purity(
     labels: np.ndarray, target_mask: np.ndarray, size_floor: int
 ) -> float:
@@ -99,8 +126,13 @@ def main() -> int:
     p.add_argument("--ngram-range", type=int, nargs=2, default=[1, 2])
     p.add_argument("--no-balance", action="store_true",
                    help="Skip the balanced-subsample step (use raw substrate).")
+    p.add_argument("--balance-variants", action="store_true",
+                   help="Balance per (seed, variant) cell instead of per seed.")
     p.add_argument("--balance-target", type=int, default=None,
-                   help="Override per-seed sample target (default: min count).")
+                   help="Override per-cell sample target (default: min cell count).")
+    p.add_argument("--seed-filter", type=str, nargs="+", default=None,
+                   help="Restrict substrate to these seed prompts before "
+                        "balancing/sweeping (e.g. --seed-filter freedom_dark).")
     p.add_argument("--out", type=Path,
                    default=Path("artifacts/purity_profile.json"))
     args = p.parse_args()
@@ -140,26 +172,74 @@ def main() -> int:
         vecs[keep], turn_idx[keep], variants[keep], seeds_arr[keep], run_ids[keep]
     )
 
-    if not args.no_balance:
-        before = Counter(seeds_arr.tolist())
-        keep_idx = balance_per_seed(seeds_arr, args.balance_target, args.kmeans_seeds[0])
-        n_before = len(seeds_arr)
-        vecs = vecs[keep_idx]
-        turn_idx = turn_idx[keep_idx]
-        variants = variants[keep_idx]
-        seeds_arr = seeds_arr[keep_idx]
-        run_ids = run_ids[keep_idx]
-        texts = [texts[i] for i in keep_idx.tolist()]
-        after = Counter(seeds_arr.tolist())
-        target_n = (
-            min(before.values()) if args.balance_target is None else args.balance_target
-        )
+    if args.seed_filter:
+        wanted = set(args.seed_filter)
+        present = set(seeds_arr.tolist())
+        missing = wanted - present
+        if missing:
+            print(f"WARNING: --seed-filter requested seeds not in substrate: "
+                  f"{sorted(missing)}")
+        keep = np.isin(seeds_arr, list(wanted))
+        n_drop = int((~keep).sum())
         print(
-            f"\nbalance per-seed → target_n={target_n}: "
-            f"n_before={n_before}, n_after={len(seeds_arr)}"
+            f"--seed-filter {sorted(wanted)}: dropped {n_drop}, "
+            f"kept {int(keep.sum())}"
         )
-        for s in sorted(before.keys()):
-            print(f"  {s:>24}  {before[s]:>5} → {after.get(s, 0):>5}")
+        texts = [t for t, kk in zip(texts, keep.tolist()) if kk]
+        vecs, turn_idx, variants, seeds_arr, run_ids = (
+            vecs[keep], turn_idx[keep], variants[keep], seeds_arr[keep], run_ids[keep]
+        )
+
+    if not args.no_balance:
+        n_before = len(seeds_arr)
+        if args.balance_variants:
+            before_cells = Counter(zip(seeds_arr.tolist(), variants.tolist()))
+            keep_idx = balance_per_seed_variant(
+                seeds_arr, variants, args.balance_target, args.kmeans_seeds[0]
+            )
+            target_n = (
+                min(before_cells.values())
+                if args.balance_target is None else args.balance_target
+            )
+            vecs = vecs[keep_idx]
+            turn_idx = turn_idx[keep_idx]
+            variants = variants[keep_idx]
+            seeds_arr = seeds_arr[keep_idx]
+            run_ids = run_ids[keep_idx]
+            texts = [texts[i] for i in keep_idx.tolist()]
+            after_cells = Counter(zip(seeds_arr.tolist(), variants.tolist()))
+            print(
+                f"\nbalance per (seed, variant) → target_n={target_n}: "
+                f"n_before={n_before}, n_after={len(seeds_arr)}"
+            )
+            for s, v in sorted(before_cells.keys()):
+                v_label = "JB" if v == "jailbroken" else "V"
+                print(
+                    f"  {s:>20}/{v_label:<2}  "
+                    f"{before_cells[(s, v)]:>5} → {after_cells.get((s, v), 0):>5}"
+                )
+        else:
+            before = Counter(seeds_arr.tolist())
+            keep_idx = balance_per_seed(
+                seeds_arr, args.balance_target, args.kmeans_seeds[0]
+            )
+            target_n = (
+                min(before.values())
+                if args.balance_target is None else args.balance_target
+            )
+            vecs = vecs[keep_idx]
+            turn_idx = turn_idx[keep_idx]
+            variants = variants[keep_idx]
+            seeds_arr = seeds_arr[keep_idx]
+            run_ids = run_ids[keep_idx]
+            texts = [texts[i] for i in keep_idx.tolist()]
+            after = Counter(seeds_arr.tolist())
+            print(
+                f"\nbalance per-seed → target_n={target_n}: "
+                f"n_before={n_before}, n_after={len(seeds_arr)}"
+            )
+            for s in sorted(before.keys()):
+                print(f"  {s:>24}  {before[s]:>5} → {after.get(s, 0):>5}")
     else:
         print("(no-balance) using raw substrate")
 
@@ -248,8 +328,12 @@ def main() -> int:
             "ks": list(args.ks),
             "seeds_present": seeds_present,
             "balanced": (not args.no_balance),
+            "balance_variants": bool(args.balance_variants),
             "balance_target": (
                 None if args.balance_target is None else int(args.balance_target)
+            ),
+            "seed_filter": (
+                None if not args.seed_filter else sorted(args.seed_filter)
             ),
             "ngram_range": list(ngram_range),
         },

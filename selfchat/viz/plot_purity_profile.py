@@ -41,10 +41,10 @@ def _plot_variant_panel(
     for variant, color in VARIANT_PALETTE.items():
         mean = np.array(variant_data[variant]["mean"], dtype=float)
         std = np.array(variant_data[variant]["std"], dtype=float)
-        ax.plot(np.arange(ks_arr.shape[0]), mean, marker="o", color=color, linewidth=2,
+        ax.plot(ks_arr, mean, marker="o", color=color, linewidth=2,
                 markersize=6, label=variant)
-        # ax.fill_between(ks_arr, mean - std, mean + std,
-        #                 color=color, alpha=0.15, linewidth=0)
+        ax.fill_between(ks_arr, mean - std, mean + std,
+                        color=color, alpha=0.15, linewidth=0)
     ax.set_ylim(0, 1.05)
     ax.set_ylabel("max cluster purity")
     ax.set_title(title, fontsize=11)
@@ -77,8 +77,10 @@ def _plot_seed_panel(
         ls = "-" if idx == 0 else "--"
         mean = np.array(seed_data[s]["mean"], dtype=float)
         std = np.array(seed_data[s]["std"], dtype=float)
-        ax.plot(np.arange(ks_arr.shape[0]), mean, color=color, linestyle=ls, marker="o",
+        ax.plot(ks_arr, mean, color=color, linestyle=ls, marker="o",
                 linewidth=2, markersize=4.5, label=s)
+        ax.fill_between(ks_arr, mean - std, mean + std,
+                        color=color, alpha=0.15, linewidth=0)
 
     baseline = 1.0 / len(seeds_present) if seeds_present else 0.0
     ax.axhline(baseline, color="gray", linewidth=0.7, linestyle=":", zorder=0)
@@ -133,8 +135,11 @@ def main() -> int:
         ax.xaxis.set_major_locator(FixedLocator(ks))
         ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{int(v)}"))
         ax.xaxis.set_minor_locator(NullLocator())
+        for i, label in enumerate(ax.get_xticklabels()):
+            if i%3 != 0:
+                label.set_visible(False)
     for ax in axes[0]:
-        ax.tick_params(axis="x", labelbottom=True)
+        # ax.tick_params(axis="x", labelbottom=True)
         ax.set_xlabel("k (clusters)")
 
     bal = "balanced" if md["balanced"] else "unbalanced"
